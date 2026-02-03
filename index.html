@@ -2929,8 +2929,11 @@
         setBattleLog([]);
         setShowWeaponSelect(false);
         
-        if (scenario[0].bgm) {
-          setCurrentBGM(scenario[0].bgm);
+        // BGMを完全にリセット
+        setCurrentBGM(null);
+        if (audioRef.current) {
+          audioRef.current.pause();
+          audioRef.current.currentTime = 0; // 再生位置をリセット
         }
       };
 
