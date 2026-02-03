@@ -1,0 +1,3156 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>IVY Quest</title>
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🌿</text></svg>">
+  <script crossorigin src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js"></script>
+  <script crossorigin src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js"></script>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <style>
+    body {
+      margin: 0;
+      padding: 0;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, 'Open Sans', 'Helvetica Neue', sans-serif;
+    }
+    .min-h-16 {
+      min-height: 4rem;
+    }
+  </style>
+</head>
+<body>
+  <div id="root"></div>
+
+  <script>
+    const { useState, useEffect, useRef } = React;
+    const { createElement: e } = React;
+
+    const Scene = (props) => {
+      return e('div',
+        {
+          className: "absolute inset-0",
+          style: {
+            backgroundImage: `url(${props.background})`,
+            backgroundPosition: 'center',
+            backgroundRepeat: 'no-repeat',
+            backgroundSize: props.backgroundSize || 'cover',
+          }
+        }
+      );
+    };
+
+    const Character = (props) => {
+      const positionClass = props.position === 'left' ? 'left-10' : props.position === 'right' ? 'right-10' : 'left-1/2 transform -translate-x-1/2';
+      
+      return e('div',
+        { className: `absolute bottom-32 ${positionClass}` },
+        e('img', {
+          src: props.image,
+          alt: "Character",
+          className: "h-64 w-auto object-contain"
+        })
+      );
+    };
+
+    const ItemDisplay = (props) => {
+      if (!props.items || props.items.length === 0) return null;
+
+      return e('div',
+        { className: "absolute top-4 right-4 w-40 max-h-[118px] overflow-y-auto flex flex-col space-y-2 bg-gray-900 bg-opacity-70 p-2 rounded-lg shadow-lg"},
+        props.items.map((item, index) =>
+          e('div',
+            { key: index,
+              className:"flex items-center bg-gray-800 bg-opacity-80 p-2 rounded-md",
+              title: item.description
+            },
+            [
+              e('img', {
+                key: "img-${index}",
+                src: item.icon,
+                alt: item.name,
+                className: "h-8 w-8 object-contain"
+              }),
+              e(
+                'span', { key: "name-${index}", className: "ml-2 text-sm text-white"},item.name)
+            ]
+          )
+        )
+      )
+    };
+
+    const HPBar = (props) => {
+      const safeHPPercentage = Math.min((props.currentHP / props.maxHP) * 100, 100);
+      const barColor = safeHPPercentage > 50 ? 'bg-green-500' : safeHPPercentage > 25 ? 'bg-yellow-500' : 'bg-red-500';
+      
+      return e('div',
+        { className: "absolute top-4 left-4 w-48" },
+        [
+          e('div', { key: 'hp-text', className: "text-white text-sm mb-1" }, `HP: ${props.currentHP}/${props.maxHP}`),
+          e('div', 
+            { key: 'hp-bar-bg', className: "w-full h-4 bg-gray-700 rounded-full overflow-hidden" },
+            e('div', { 
+              className: `h-full ${barColor}`, 
+              style: { width: `${safeHPPercentage}%` }
+            })
+          )
+        ]
+      );
+    };
+
+    const GameOver = (props) => {
+      return e('div',
+        { className: "absolute inset-0 bg-black bg-opacity-80 flex flex-col items-center justify-center" },
+        [
+          e('h1', { key: 'gameover-title', className: "text-4xl text-red-600 mb-8" }, "Game Over"),
+          e('button', 
+            { 
+              key: 'restart-btn',
+              className: "px-6 py-3 bg-blue-600 hover:bg-blue-700 rounded-lg text-white font-bold",
+              onClick: props.onRestart
+            },
+            "ゲームを再開する"
+          ),
+          e('p', { key: 'gameover-msg', className: "mt-4 text-white" }, "HPがゼロになりました")
+        ]
+      );
+    };
+
+    // 戦闘ログコンポーネント（自動スクロール対応）
+    const BattleLog = (props) => {
+      const logEndRef = useRef(null);
+      
+      // ログが更新されるたびに自動スクロール
+      useEffect(() => {
+        if (logEndRef.current) {
+          logEndRef.current.scrollIntoView({ behavior: 'smooth' });
+        }
+      }, [props.log]);
+      
+      if (!props.log || props.log.length === 0) return null;
+      
+      return e('div',
+        { className: "absolute bottom-20 left-4 right-4 bg-gray-800 bg-opacity-90 p-4 rounded-lg max-h-32 overflow-y-auto" },
+        [
+          ...props.log.map((entry, index) =>
+            e('div', 
+              { 
+                key: index, 
+                className: entry.type === 'critical' ? 'text-yellow-300 font-bold' : 
+                           entry.type === 'miss' ? 'text-gray-400' : 
+                           entry.type === 'victory' ? 'text-green-400 font-bold' :
+                           'text-white'
+              }, 
+              entry.message
+            )
+          ),
+          e('div', { key: 'log-end', ref: logEndRef })
+        ]
+      );
+    };
+
+    // 武器選択コンポーネント（シンプル版）
+    const WeaponSelector = (props) => {
+      const weapons = props.inventory.filter(item => item.weaponStats);
+      
+      if (weapons.length === 0) {
+        return e('div',
+          { className: "absolute bottom-20 left-1/2 transform -translate-x-1/2 w-auto bg-gray-800 bg-opacity-95 px-6 py-4 rounded-lg" },
+          [
+            e('h2', { key: 'no-weapon-title', className: "text-xl mb-4 text-red-500 text-center" }, "武器を持っていません！"),
+            e('p', { key: 'no-weapon-desc', className: "text-white mb-4 text-center text-sm" }, "素手で戦うしかありません..."),
+            e('button',
+              {
+                key: 'bare-hand-btn',
+                className: "w-full px-4 py-2 bg-gray-700 hover:bg-gray-600 rounded-lg text-sm",
+                onClick: () => props.onSelectWeapon(null)
+              },
+              "素手で攻撃"
+            )
+          ]
+        );
+      }
+      
+      return e('div',
+        { className: "absolute bottom-20 left-1/2 transform -translate-x-1/2 w-auto" },
+        [
+          e('h2', { 
+            key: 'weapon-title', 
+            className: "text-lg mb-2 text-center bg-gray-800 bg-opacity-95 px-4 py-2 rounded-t-lg font-bold" 
+          }, "武器を選択"),
+          e('div', { 
+            key: 'weapon-grid', 
+            className: "flex gap-3 bg-gray-800 bg-opacity-95 px-4 py-3 rounded-b-lg" 
+          },
+            weapons.map((weapon, index) =>
+              e('button',
+                {
+                  key: index,
+                  className: "px-4 py-3 bg-blue-700 hover:bg-blue-600 rounded-lg flex items-center gap-2 transition shadow-lg min-w-32",
+                  onClick: () => props.onSelectWeapon(weapon)
+                },
+                [
+                  e('img', {
+                    key: `weapon-img-${index}`,
+                    src: weapon.icon,
+                    alt: weapon.name,
+                    className: "h-8 w-8"
+                  }),
+                  e('span', { key: `weapon-name-${index}`, className: "text-base font-bold" }, weapon.name)
+                ]
+              )
+            )
+          )
+        ]
+      );
+    };
+
+    const VisualNovelEngine = () => {
+      const [currentSceneIndex, setCurrentSceneIndex] = useState(0);
+      const [showChoices, setShowChoices] = useState(false);
+      const [textProgress, setTextProgress] = useState(0);
+      const [isAnimating, setIsAnimating] = useState(false);
+      const [autoPlayActive, setAutoPlayActive] = useState(false);
+      const [textSpeed, setTextSpeed] = useState(30);
+      const [autoPlaySpeed, setAutoPlaySpeed] = useState(2000);
+      const [historyLog, setHistoryLog] = useState([]);
+      const [showHistory, setShowHistory] = useState(false);
+      const [showConfig, setShowConfig] = useState(false);
+      const [backgroundSizes, setBackgroundSizes] = useState({});
+      const [inventory, setInventory] = useState([]);
+      const [hp, setHP] = useState(100);
+      const [maxHP, setMaxHP] = useState(100);
+      const [isGameOver, setIsGameOver] = useState(false);
+      const [currentBGM, setCurrentBGM] = useState(null);
+      const audioRef = useRef(null);
+      
+
+      // ゲームを最初から開始する
+      const resetGame = () => {
+          setCurrentSceneIndex(0);
+          setInventory([]);
+          setHP(100);
+          setMaxHP(100);
+          setHistoryLog([]);
+          setIsGameOver(false);
+          setCurrentBGM(null);
+          setShowChoices(false);
+          setTextProgress(0);
+          setIsAnimating(false);
+          setAutoPlayActive(false);
+          setTextSpeed(30);
+          setAutoPlaySpeed(2000); 
+      };
+
+      // 戦闘関連の状態
+      const [currentBattle, setCurrentBattle] = useState(null);
+      const [showWeaponSelect, setShowWeaponSelect] = useState(false);
+      const [battleLog, setBattleLog] = useState([]);
+
+      useEffect(() => {
+        audioRef.current = new Audio();
+        audioRef.current.loop = true;
+        audioRef.current.onerror = (e) => {
+          console.error('BGMのロードに失敗しました:', e);
+        };
+        return () => {
+          if (audioRef.current) {
+            audioRef.current.pause();
+          }
+        };
+      }, []);
+
+      useEffect(() => {
+       if (currentBGM && audioRef.current) {
+         audioRef.current.src = currentBGM;  // ← "./audio/" を削除
+         audioRef.current.play().catch(e => console.error('BGM再生エラー:', e));
+       }
+      }, [currentBGM]);
+
+      useEffect(() => {
+        if (hp <= 0) {
+          setHP(0);
+          setIsGameOver(true);
+          if (audioRef.current) {
+            audioRef.current.pause();
+          }
+        }
+      }, [hp]);
+      
+      useEffect(() => {
+        processSceneEffects(currentSceneIndex);
+      }, [currentSceneIndex]);
+      
+      useEffect(() => {
+        // 初回ロード時にScene0のBGMを再生
+        if (scenario[0] && scenario[0].bgm) {
+          setCurrentBGM(scenario[0].bgm);
+        }
+      }, []);
+            
+      
+      const defaultBackgroundSize = "cover";
+
+      const scenario = [
+        // シーン0 - タイトル（BGMなし）
+        {
+          id: "Scene0",
+          background: "./images/Scene0.png",
+          character: null,
+          text: "悪の魔王に姫が囚われてしまった。\n早く救い出さなければ！\n\n（画面をクリックして開始）",
+          choices: null,
+          nextSceneId: "Scene0_BGMStart"  // ← BGM開始シーンへ
+        },
+        
+        // シーン0_BGMStart - BGM開始
+        {
+          id: "Scene0_BGMStart",
+          bgm: "./audio/TEST.mp3",  // ← ここでBGM開始（クリック後なので再生可能）
+          background: "./images/Scene0.png",
+          character: null,
+          text: "さあ、冒険の始まりだ…",
+          choices: null,
+          nextSceneId: "Scene1"
+        },
+
+        // シーン1 - 導入部分
+        {
+          id: "Scene1",
+          background: "./images/Scene1.png",
+          text: "悪の魔王に囚われた姫を救い出すべく洞窟に来た。\nしっかりとした装備を用意しようと思ったが短剣1本しか用意出来なかった。\nのんびり準備をしている時間はない。\n\nさあ何が待つか分からない洞窟へ入っていこう…。",
+          character: null,
+          choices: null,
+          //bgm: "intro.mp3",
+          collectItem: {
+            id: "short_sword",
+            name: "短剣",
+            description: "最初から持っている短剣",
+            icon: "./images/icon_short_sword.png",
+            weaponStats: {
+              attackPower: 5, //攻撃力
+              accuracy: 90, //命中率
+              criticalRate: 5 //クリティカル率
+            }
+          }
+        },
+        
+        // シーン2 - 最初の分かれ道
+        {
+          id: "Scene2",
+          background: "./images/Scene2.png",
+          character: null,
+          text: "道は二手に分かれている。どちらに進むべきか…。\n今は迷っても仕方ない。迷わないように進む事だけを考えよう。",
+          choices: [
+            { 
+              text: "前へ進む",
+                conditionalBranching: {
+                    itemRequired: "gold_coin",
+                    trueSceneId: "Scene3_Already_HaveCoin",    // 金貨を持っている場合
+                    falseSceneId: "Scene3" // 金貨を持っていない場合
+                }
+            },
+            { text: "右へ進む", nextSceneId: "Scene10" }
+          ],
+        },
+        
+        // シーン3 金貨を見つける
+        {
+          id: "Scene3",
+          background: "./images/Scene3.png",
+          character: null,
+          text: "通路の片隅に麻袋が放置されている。\n中には金貨がぎっしりと詰まっていた。\n地獄の沙汰も金次第、何かの役に立つだろうか。",
+          choices: [
+            { text: "金貨を手に入れる", nextSceneId: "Scene3_GetCoin" },
+            { text: "金貨を無視して前に進む", nextSceneId: "Scene4" },
+            { text: "来た道を戻る", nextSceneId: "Scene2" }
+          ],
+        },
+        
+        // 金貨取得シーン
+        {
+          id: "Scene3_GetCoin",
+          background: "./images/Scene3.png",
+          text: "金貨を数枚ポケットに押し込んだ。\nいつか役に立つ時が来るだろうか。",
+          character: null,
+          collectItem: {
+            id: "gold_coin",
+            name: "金貨",
+            description: "麻袋の中から手に入れた金貨",
+            icon: "./images/icon_coin.png"
+          },
+          choices: [
+            { text: "前に進む", nextSceneId: "Scene4" },
+            { text: "来た道を戻る", nextSceneId: "Scene2" }
+          ],
+          hpChange: 0, // HP減少イベント
+        },
+        
+        {
+          id: "Scene3_Already_HaveCoin",
+          background: "./images/Scene3.png",
+          text: "もう少し金貨を持っていきたいがポケットが一杯だ。\n今は姫を救出する事に意識を集中しよう。",
+          character: null,
+          choices: [
+            { text: "前に進む", nextSceneId: "Scene4" },
+            { text: "来た道を戻る", nextSceneId: "Scene2" }
+          ],
+          hpChange: 0, // HP減少イベント
+        },
+        // シーン4 下へ降りる階段
+        {
+          id: "Scene4",
+          background: "./images/Scene4.png",
+          character: null,
+          text: "下に降りる階段を見つけた。\nどこかで獣のうなり声がした気がしたが気のせいだろうか…。",
+          choices: [
+            { text: "下へ降りる", nextSceneId: "Scene5" },
+            { 
+              text: "来た道を戻る",
+              conditionalBranching: {
+                    itemRequired: "gold_coin",
+                    trueSceneId: "Scene3_Already_HaveCoin",    // 金貨を持っている場合
+                    falseSceneId: "Scene3" // 金貨を持っていない場合
+              }
+            }
+          ],
+        },
+        
+        // シーン5 階段からの通路
+        {
+          id: "Scene5",
+          background: "./images/Scene5.png",
+          character: null,
+          text: "奥から冷たい風が吹いてきている。\n引き返すなら今のうちかもしれない…。",
+          choices: [
+            { text: "前へ進む", nextSceneId: "Scene6" },
+            { text: "来た道を戻る", nextSceneId: "Scene4"}
+          ],
+        },
+        
+        // シーン6 上下への梯子
+        {
+          id: "Scene6",
+          background: "./images/Scene6.png",
+          character: null,
+          text: "突き当りまで進むと上へも下へも行ける梯子を見つけた。\nどっちへ進んだら良いのだろうか。\n急に魔物が襲ってこない事を祈りながら進もう。",
+          choices: [
+            { 
+               text: "上へ行く",
+               multiConditionalBranching: [
+                 {
+                   itemRequired: "normal_sword",
+                   nextSceneId: "Scene7_Already_HaveSword"
+                 },
+                 {
+                   itemRequired: "broken_sword", 
+                   nextSceneId: "Scene7_Already_HaveSword"
+                 }
+              ],
+              defaultSceneId: "Scene7" // どのアイテムも持っていない場合
+            },
+            { text: "下へ行く", 
+                conditionalBranching: {
+                    itemRequired: "normal_armor",
+                    trueSceneId: "Scene8_With_Armor",    // 普通の鎧を持っている場合
+                    falseSceneId: "Scene8" // 普通の鎧を持っていない場合
+                }
+            },
+            { text: "来た道を戻る", nextSceneId: "Scene5"}
+          ],
+         },
+        
+        // シーン7 剣の獲得
+        {
+          id: "Scene7",
+          background: "./images/Scene7.png",
+          character: null,
+          text: "不自然に石に突き刺さった剣がある。\nこういう場合これが伝説の剣であるという流れがファンタジーでは多いけれど\n剣を観察してみるとボロボロで一度使ったら刃こぼれしたり折れたりしそうだ。",
+          choices: [
+            { text: "剣を力いっぱい引き抜いてみる", nextSceneId: "Scene7_Get_Broken_Sword"},
+            { text: "剣をゆっくり引き抜いてみる", nextSceneId: "Scene7_Get_Sword"},
+            { text: "剣には触らず来た道を戻る", nextSceneId: "Scene6"}
+          ],
+        },
+        
+        {
+          id: "Scene7_Get_Sword",
+          background: "./images/Scene7.png",
+          character: null,
+          text: "力を入れずゆっくり剣を引き抜いてみるとスルスルと抜けてしまった。\nやはりこれは伝説の剣などではなく誰かが置いていったものなのだろう。\n他には何もないようだ下の階へ戻ろう。",
+          collectItem: {
+            id: "normal_sword",
+            name: "誰かの剣",
+            description: "石に刺さっていた剣",
+            icon: "./images/icon_normal_sword.png",
+            weaponStats: {
+              attackPower: 10, //攻撃力
+              accuracy: 90, //命中率
+              criticalRate: 5 //クリティカル率
+            }
+          },
+          nextSceneId: "Scene6",
+        },
+        
+        {
+          id: "Scene7_Get_Broken_Sword",
+          background: "./images/Scene7.png",
+          character: null,
+          text: "力を入れて思いっきり剣を引き抜いてみるがびくともしない。\nあれやこれや試しているうちに剣は岩の所でポッキリと折れてしまった。\n短剣よりはマシか…。一応持っていこう。",
+          collectItem: {
+            id: "broken_sword",
+            name: "折れた剣",
+            description: "石に刺さっていた剣",
+            icon: "./images/icon_broken_sword.png",
+            weaponStats: {
+              attackPower: 7, //攻撃力
+              accuracy: 90, //命中率
+              criticalRate: 5 //クリティカル率
+            }
+          },
+          nextSceneId: "Scene6",
+        },
+        
+        {
+          id: "Scene7_Already_HaveSword",
+          background: "./images/Scene7_Already_HaveSword.png",
+          text: "既に剣を持っているので、ここには何もないようだ。",
+          character: null,
+          choices: [
+            { text: "下の階へ戻る", nextSceneId: "Scene6" }
+          ]
+        },
+        
+        // シーン8 モンスター
+        {
+          id: "Scene8",
+          background: "./images/Scene8.png",
+          character: null,
+          text: "モンスターと遭遇した。\n手持ちの武器でなんとかなるだろうか…。",
+          choices: [
+            { text: "戦う", nextSceneId: "Scene8_No_Armor"}, 
+            { text: "逃げられる機会を伺う", nextSceneId: "Scene8_RunAway" },
+            { text: "来た道を戻る", nextSceneId: "Scene8_DeadEnd"}
+          ],
+        },
+        
+        {
+          id: "Scene8_With_Armor",
+          background: "./images/Scene8.png",
+          character: null,
+          text: "モンスターと遭遇した。\n手持ちの武器でなんとかなるだろうか…。",
+          choices: [
+            { text: "戦う", nextSceneId: "Scene9"},
+            { text: "逃げられる機会を伺う", nextSceneId: "Scene8_RunAway2"} 
+          ],
+        },
+        
+        {
+          id: "Scene8_No_Armor",
+          background: "./images/Scene8.png",
+          character: null,
+          text: "モンスターを目の前にして防具すら持っていないのに戦おうなんて、なんてバカな事を考えたんだろう。",
+          choices: [
+            { text: "次へ", nextSceneId: "GameOver" }
+          ],
+        },
+
+         {
+          id: "Scene8_RunAway",
+          background: "./images/Scene8.png",
+          character: null,
+          text: "モンスターの爪がかすったがなんとか逃げ切った。",
+          nextSceneId: "Scene6",
+          hpChange: -5 // HP減少イベント
+        },
+
+         {
+          id: "Scene8_RunAway2",
+          background: "./images/Scene8.png",
+          character: null,
+          text: "モンスターの爪がかすったがなんとか逃げ切った。",
+          nextSceneId: "Scene6",
+          hpChange: -2.5 // HP減少イベント
+        },
+
+        {
+          id: "Scene8_DeadEnd",
+          background: "./images/Scene8.png",
+          character: null,
+          text: "モンスターを目の前にして梯子を上って逃げようなんて、なんてバカな事を考えたんだろう。\n魔物が梯子を上るまで待ってくれる訳もなく防具すら付けていない私に、\n死を防ぐ術はなかった…。",
+          choices: [
+            { text: "次へ", nextSceneId: "GameOver" },
+          ],
+        },
+
+        
+        //シーン9 戦闘
+        {
+          id: "Scene9",
+          background: "./images/Scene9.png",
+          character: null,
+          text: "モンスターが襲いかかってきた！",
+          battleMode: true,
+          enemy: {
+            id: "monster",
+            name: "モンスター",
+            maxHP: 20,
+            currentHP: 20,
+            attackPower: 8,
+            image: "./images/chara_Monster1.png"
+          },
+          onVictory: "Scene9_Victory",
+          onDefeat: "GameOver"
+        },
+        
+        {
+          id: "Scene9_Victory",
+          background: "./images/Scene9_victory.png",
+          text: "モンスターを倒した！\n何かの薬を手に入れたが、回復薬だろうか…？",
+          character: null,
+          choices: [
+            { text: "薬を飲む", nextSceneId: "Scene9_UseItem" },
+            { text: "薬を飲まない", nextSceneId: "Scene9_notUseItem" }
+          ]
+        },
+        
+        {
+          id: "Scene9_UseItem",
+          background: "./images/Scene9_victory.png",
+          text: "薬は回復薬だったようだ。\nお陰で傷も癒えた。\n\n辺りを見回したが、先に進む道はなさそうだ……戻って別の道を探そう。",
+          character: null,
+          nextSceneId: "Scene6",
+          hpChange: +100 // HP回復イベント
+        },
+
+        {
+          id: "Scene9_notUseItem",
+          background: "./images/Scene9_victory.png",
+          text: "怪しいので飲むのは止めておこう。\n\n辺りを見回したが、先に進む道はなさそうだ……戻って別の道を探そう。",
+          character: null,
+          nextSceneId: "Scene6",
+        },
+
+        
+        // シーン10 入口から右へ
+        {
+          id: "Scene10",
+          background: "./images/Scene10.png",
+          character: null,
+          text: "通路はさらに続き右に曲がっている。\n進んでいくと下へ降りられる梯子があった。\n右からカシャカシャと金属が擦れるような不思議な音がしていて気になるが…さてどうしようか。",
+          choices: [
+            { text: "このまま右へ進む",
+                conditionalBranching: {
+                    itemRequired: "rope",
+                    trueSceneId: "Scene11_Already_HaveRope",    // ロープを持っている場合
+                    falseSceneId: "Scene11" // ロープを持っていない場合
+                }
+            },
+            { text: "梯子を下りる",
+                conditionalBranching: {
+                    itemRequired: "copper_key",
+                    trueSceneId: "Scene16_Already_Havekey",    // 銅の鍵を持っている場合
+                    falseSceneId: "Scene16" // 銅の鍵を持っていない場合
+                }
+            },
+            { text: "来た道を戻る", nextSceneId: "Scene2"}
+          ],
+        },        
+        // シーン11 ロープを見つける
+        {
+          id: "Scene11",
+          background: "./images/Scene11.png",
+          character: null,
+          text: "床にロープが落ちている。持っていけば何かと便利に使えそうな気がする。",
+          choices: [
+            { text: "ロープを拾う", nextSceneId: "Scene11_Get_Rope" },
+            { text: "ロープを拾わず進む", nextSceneId: "Scene12" },
+            { text: "来た道を戻る", nextSceneId: "Scene10"}
+          ],
+        },
+        
+        {
+          id: "Scene11_Get_Rope",
+          background: "./images/Scene11_Get_Rope.png",
+          text: "ロープをまとめて持っていく事にした。\nどこで使うのか考えないと後悔しそうだ。",
+          character: null,
+          collectItem: {
+            id: "rope",
+            name: "ロープ",
+            description: "通路に落ちていたロープ",
+            icon: "./images/icon_rope.png"
+          },
+          choices: [
+            { text: "前に進む", nextSceneId: "Scene12" },
+            { text: "来た道を戻る", nextSceneId: "Scene10" }
+          ],
+          hpChange: 0, // HP減少イベント
+        },
+
+        {
+          id: "Scene11_Already_HaveRope",
+          background: "./images/Scene11_Get_Rope.png",
+          text: "先ほどロープがあった通路だ。\n拾ってしまったのでもう何もない。",
+          character: null,
+          choices: [
+            { text: "前に進む", nextSceneId: "Scene12" },
+            { text: "来た道を戻る", nextSceneId: "Scene10" }
+          ],
+          hpChange: 0, // HP減少イベント
+        },
+        
+        // シーン12 井戸
+        {
+          id: "Scene12",
+          background: "./images/Scene12.png",
+          character: null,
+          text: "行き止まりに古びた井戸を見つけた。\n中を覗き込むと底から風が吹き上げてくるのを感じた。\n不思議な音はこの中から聞こえているようだ。\nロープを使えば降りられるのかもしれない。",
+          choices: [
+            { text: "降りてみる",
+              conditionalBranching: {
+                itemRequired: "rope",
+                trueSceneId: "Scene13",
+                falseSceneId: "Scene12_Fall"
+              }
+            },
+            { text: "来た道を戻る",
+              conditionalBranching: {
+                itemRequired: "rope",
+                trueSceneId: "Scene11_Already_HaveRope",
+                falseSceneId: "Scene11"
+              }
+            }
+          ],
+        },
+        
+        {
+          id: "Scene12_Fall",
+          background: null,
+          character: null,
+          text: "ロープを持っていないのに降りようなんて、なんてバカな事を考えたんだろう。\n暗闇へと続く奈落の底へと落ちていく嫌な感覚が続く…。",
+          choices: [
+            { text: "次へ", nextSceneId: "GameOver" },
+          //hpChange: -100, // HP減少イベント
+          ],
+        },
+
+        // シーン13 井戸の底
+        {
+          id: "Scene13",
+          background: "./images/Scene13.png",
+          character: null,
+          text: "古びた井戸の中は静寂に包まれ、\n何かが潜む気配だけ漂っていた。",
+          choices: [
+            { text: "前へ進む", 
+                conditionalBranching: {
+                    itemRequired: "normal_armor",
+                    trueSceneId: "Scene14_With_Armor",    // 防具を持っている場合
+                    falseSceneId: "Scene14" // 防具を持っていない場合
+                }
+            },
+            { text: "来た道を戻る", nextSceneId: "Scene12"}
+          ],
+        },
+
+       // シーン14 ゾンビ
+        {
+          id: "Scene14",
+          background: "./images/Scene14.png",
+          character: null,
+          text: "モンスターと遭遇した。\n手持ちの武器でなんとかなるだろうか…。",
+          choices: [
+            { text: "戦う", nextSceneId: "Scene15_Without_Armor"},
+            { text: "逃げられる機会を伺う", nextSceneId: "Scene14_RunAway1"},
+            { text: "来た道を戻る", nextSceneId: "Scene14_DeadEnd"}
+          ],
+        },
+
+        {
+          id: "Scene14_With_Armor",
+          background: "./images/Scene14.png",
+          character: null,
+          text: "モンスターと遭遇した。\n手持ちの武器でなんとかなるだろうか…。",
+          choices: [
+            { text: "戦う", nextSceneId: "Scene15_With_Armor"},
+            { text: "逃げられる機会を伺う", nextSceneId: "Scene14_RunAway2"},
+          ],
+        },
+        
+         {
+          id: "Scene14_RunAway1",
+          background: "./images/Scene14.png",
+          character: null,
+          text: "ゾンビの爪がかすったがなんとか逃げ切った。",
+          nextSceneId: "Scene13",
+          hpChange: -5 // HP減少イベント
+        },
+
+         {
+          id: "Scene14_RunAway2",
+          background: "./images/Scene14.png",
+          character: null,
+          text: "ゾンビの爪がかすったがなんとか逃げ切った。",
+          nextSceneId: "Scene13",
+          hpChange: -2.5 // HP減少イベント
+        },
+        
+        {
+          id: "Scene14_DeadEnd",
+          background: "./images/Scene14.png",
+          character: null,
+          text: "暗い井戸の底の奥で微かに揺れる影があった。\nその輪郭は人型であり見た目は生者とは呼べない何かだった。",
+          choices: [
+            { text: "次へ", nextSceneId: "GameOver" },
+          //hpChange: 0, // HP減少イベント
+          ],
+        },
+
+        
+        //シーン15 戦闘
+        {
+          id: "Scene15_Without_Armor",
+          background: "./images/Scene15.png",
+          character: null,
+          text: "ゾンビが襲いかかってきた！",
+          battleMode: true,
+          enemy: {
+            id: "zombie",
+            name: "ゾンビ",
+            maxHP: 15,
+            currentHP: 15,
+            attackPower: 5,
+            image: "./images/chara_Zombie.png"
+          },
+          onVictory: "Scene15_GetArmor",
+          onDefeat: "GameOver"
+        },
+        
+        {
+          id: "Scene15_GetArmor",
+          background: "./images/Scene15_victory.png",
+          text: "ゾンビを倒した！\nよく見るとこのゾンビは鎧を身に着けているようだ。\n勝手に持っていくのは気が引けるが、防具も何もない今よりはマシだろう。\nゾンビの来ていた鎧を拝借することにした。\n\n辺りを見回したが、先に進む道はなさそうだ……戻って別の道を探そう。",
+          character: null,
+          collectItem: {
+            id: "normal_armor",
+            name: "普通の鎧",
+            description: "敵と戦って入手した鎧",
+            icon: "./images/icon_normal_armor.png"
+          },
+          nextSceneId: "Scene13",
+        },
+        
+        {
+          id: "Scene15_With_Armor",
+          background: "./images/Scene15.png",
+          character: null,
+          text: "ゾンビが襲いかかってきた！",
+          battleMode: true,
+          enemy: {
+            id: "zombie",
+            name: "ゾンビ",
+            maxHP: 15,
+            currentHP: 15,
+            attackPower: 5,
+            image: "./images/chara_Zombie.png"
+          },
+          onVictory: "Scene15_Victory",
+          onDefeat: "GameOver"
+        },
+        
+        {
+          id: "Scene15_Victory",
+          background: "./images/Scene15_victory.png",
+          text: "ゾンビを倒した！\n何かの薬を手に入れたが、回復薬だろうか…？",
+          character: null,
+          choices: [
+            { text: "薬を飲む", nextSceneId: "Scene15_UseItem" },
+            { text: "薬を飲まない", nextSceneId: "Scene15_notUseItem" }
+          ]
+        },
+
+        {
+          id: "Scene15_UseItem",
+          background: "./images/Scene15_victory.png",
+          text: "薬は毒薬だったようだ…。\n\n辺りを見回したが、先に進む道はなさそうだ……戻って別の道を探そう。",
+          character: null,
+          nextSceneId: "Scene13",
+          hpChange: -5 // HP減少イベント
+        },
+
+        {
+          id: "Scene15_notUseItem",
+          background: "./images/Scene15_victory.png",
+          text: "怪しいので飲むのは止めておこう。\n\n辺りを見回したが、先に進む道はなさそうだ……戻って別の道を探そう。",
+          character: null,
+          nextSceneId: "Scene13",
+        },
+
+        // シーン16 銅の鍵
+        {
+          id: "Scene16",
+          background: "./images/Scene16.png",
+          character: null,
+          text: "通路の中央に宝箱が置いてある。\n鍵がかかっているが銀の鍵で開けることができそうだ。\n中には何か役立つものが入っているだろうか…。",
+          choices: [
+            { text: "宝箱を開ける", 
+                 conditionalBranching: {
+                    itemRequired: "silver_key",
+                    trueSceneId: "Scene16_Getkey",    // 銀の鍵を持っている場合
+                    falseSceneId: "Scene16_Not_HaveSilverKey" // 銀の鍵を持っていない場合
+                 }
+            },
+            { text: "宝箱を無視して前に進む", nextSceneId: "Scene17" },
+            { text: "来た道を戻る", nextSceneId: "Scene10" }
+          ],
+        },
+
+        {
+          id: "Scene16_Not_HaveSilverKey",
+          background: "./images/Scene16.png",
+          character: null,
+          text: "通路の中央に宝箱が放置されている。\n鍵がかかっており今は開けることができないようだ。\nどこかに鍵は落ちていないだろうか…。",
+          choices: [
+            { text: "前に進む", nextSceneId: "Scene17" },
+            { text: "来た道を戻る", nextSceneId: "Scene10" }
+          ],
+        },
+
+        {
+          id: "Scene16_Getkey",
+          background: "./images/Scene16_Getkey.png",
+          text: "宝箱の中から銅の鍵を見つけた。\nこの鍵もどこかで使うことができるのだろうか。",
+          character: null,
+          collectItem: {
+            id: "copper_key",
+            name: "銅の鍵",
+            description: "宝箱から手に入れた銅の鍵",
+            icon: "./images/icon_copper_key.png"
+          },
+          useItem: { id: "silver_key", consumeOnUse: true },
+          choices: [
+            { text: "前に進む", nextSceneId: "Scene17" },
+            { text: "来た道を戻る", nextSceneId: "Scene10" }
+          ],
+        },
+
+        {
+          id: "Scene16_Already_Havekey",
+          background: "./images/Scene16_Already_Havekey.png",
+          character: null,
+          text: "この部屋にはあけられた空っぽの宝箱しかない。\n念のため宝箱の底を確認したが何もなかった。\nこの部屋には用はない先へ急ごう。",
+          choices: [
+            { text: "前に進む", nextSceneId: "Scene17" },
+            { text: "来た道を戻る", nextSceneId: "Scene10" }
+          ],
+        },
+
+
+        // シーン17 左右の分岐
+        {
+          id: "Scene17",
+          background: "./images/Scene17.png",
+          character: null,
+          text: "通路を奥に進むと道が左右に分かれた。\nどちらに進むべきだろうか。",
+          choices: [
+            { text: "右に進む", nextSceneId: "Scene18" },
+            { text: "左に進む", nextSceneId: "Scene21" },
+            { text: "来た道を戻る",
+                conditionalBranching: {
+                    itemRequired: "copper_key",
+                    trueSceneId: "Scene16_Already_Havekey",    // 銅の鍵を持っている場合
+                    falseSceneId: "Scene16" // 銅の鍵を持っていない場合
+                }
+            },
+          ],
+        },
+
+        // シーン18 地下に続く階段
+        {
+          id: "Scene18",
+          background: "./images/Scene18.png",
+          character: null,
+          text: "薄暗い階段が地下へと続いている。\nこの先から微かな光が足元を照らしている。",
+          choices: [
+            { text: "地下へ降りる",
+                conditionalBranching: {
+                    itemRequired: "lamp",
+                    trueSceneId: "Scene19_Already_Havelamp",    // ランプを持っている場合
+                    falseSceneId: "Scene19" // ランプを持っていない場合
+                }
+            },
+            { text: "来た道を戻る", nextSceneId: "Scene17" },
+          ],
+        },
+
+        // シーン19 ランプを見つける
+        {
+          id: "Scene19",
+          background: "./images/Scene19.png",
+          character: null,
+          text: "足元の光に目を向けると、そこにはオイル式のランプが落ちていた。",
+          choices: [
+            { text: "ランプを拾う", nextSceneId: "Scene19_Getlamp" },
+            { text: "ランプを拾わず前に進む", nextSceneId: "Scene20" },
+            { text: "来た道を戻る", nextSceneId: "Scene18" }
+          ],
+        },
+
+        // シーン19 ランプ取得
+        {
+          id: "Scene19_Getlamp",
+          background: "./images/Scene19_Getlamp.png",
+          text: "落ちていたランプを拾った。\nどこか真っ暗な場所で役に立つだろう。",
+          character: null,
+          collectItem: {
+            id: "lamp",
+            name: "ランプ",
+            description: "ランプを入手した",
+            icon: "./images/icon_lamp.png"
+          },
+          choices: [
+            { text: "前に進む", nextSceneId: "Scene20" },
+            { text: "来た道を戻る", nextSceneId: "Scene18" }
+          ],
+        },
+
+        // シーン19 ランプ取得済
+        {
+          id: "Scene19_Already_Havelamp",
+          background: "./images/Scene19_Getlamp.png",
+          character: null,
+          text: "すでにここではランプを拾ったので他には何もないようだ。",
+          choices: [
+            { text: "前に進む", nextSceneId: "Scene20" },
+            { text: "来た道を戻る", nextSceneId: "Scene18" }
+          ],
+        },
+
+
+        //シーン20 ボスの手下1遭遇～戦闘
+        {
+          id: "Scene20",
+          background: "./images/Scene20.png",
+          text: "ここがお前の墓場だ！",
+          character: {
+            name: "ボスの手下1",
+            image: "./images/chara_Minions1.png",
+            position: "center"
+          },
+        },
+        {
+          id: "Scene20_talk2",
+          background: "./images/Scene20_Battle.png",
+          character: null,
+          text: "見逃してくれる気はなさそうだ。私は戦う決意をした。",
+          choices: [
+            { 
+              text: "次へ",
+                conditionalBranching: {
+                    itemRequired: "normal_armor",
+                    trueSceneId: "Scene20_Battle", // 普通の鎧を持っている場合
+                    falseSceneId: "Scene20_DeadEnd" // 普通の鎧を持っていない場合
+                }
+            },
+          ],
+        },
+        {
+          id: "Scene20_DeadEnd",
+          background: "./images/Scene20_Battle.png",
+          text: "身を守る装備もなしに戦いに挑むなんて、なんてバカな事を考えたんだろう。\n相手の容赦ない攻撃に、意識が遠くなっていく…。",
+          character: null,
+          choices: [
+            { text: "次へ", nextSceneId: "GameOver" },
+          ],
+        },
+        {
+          id: "Scene20_Battle",
+          background: "./images/Scene20_Battle.png",
+          character: null,
+          text: "ボスの手下1が襲いかかってきた！",
+          battleMode: true,
+          enemy: {
+            id: "minions1",
+            name: "ボスの手下1",
+            maxHP: 45,
+            currentHP: 45,
+            attackPower: 5,
+            image: "./images/chara_Minions1.png"
+          },
+          onVictory: "Scene20_Victory",
+          onDefeat: "GameOver"
+        },
+        {
+          id: "Scene20_Victory",
+          background: "./images/Scene20_Victory.png",
+          text: "ボスの手下1を倒した！\n何かの薬を手に入れたが、回復薬だろうか…？",
+          character: null,
+          choices: [
+            { text: "薬を飲む", nextSceneId: "Scene20_UseItem" },
+            { text: "薬を飲まない", nextSceneId: "Scene20_notUseItem" },
+          ],
+        },
+        {
+          id: "Scene20_UseItem",
+          background: "./images/Scene20_Victory.png",
+          text: "薬は回復薬だったようで、傷が癒えた。\n辺りを見回したが、先に進む道はないようだ……戻って別の道を探そう。",
+          character: null,
+          choices: [
+            { 
+              text: "次へ", 
+                conditionalBranching: {
+                    itemRequired: "lamp",
+                    trueSceneId: "Scene19_Already_Havelamp", //ランプを持っている場合
+                    falseSceneId: "Scene19" //ランプを持っていない場合
+                }
+             }
+          ],
+          hpChange: +100 // HP回復イベント
+        },
+
+        {
+          id: "Scene20_notUseItem",
+          background: "./images/Scene20_Victory.png",
+          text: "怪しいので飲むのは止めた…。\n辺りを見回したが、先に進む道はないようだ……戻って別の道を探そう。",
+          character: null,
+          choices: [
+            { 
+              text: "次へ", 
+                conditionalBranching: {
+                    itemRequired: "lamp",
+                    trueSceneId: "Scene19_Already_Havelamp", //ランプを持っている場合
+                    falseSceneId: "Scene19" //ランプを持っていない場合
+                }
+             }
+          ]
+        },
+
+        // シーン21 地下と前
+        {
+          id: "Scene21",
+          background: "./images/Scene21.png",
+          character: null,
+          text: "このまま地下ヘ進む道と前へ進む道がある。\nどちらに進もうか。",
+          choices: [
+            { text: "地下へ進む", 
+                conditionalBranching: {
+                    itemRequired: "silver_key",
+                    trueSceneId: "Scene22_Already_HaveSilverKey",    // 銀の鍵を持っている場合
+                    falseSceneId: "Scene22" // 銀の鍵を持っていない場合
+                }
+            },
+            { text: "前へ進む", nextSceneId: "Scene23" },
+            { text: "来た道を戻る", nextSceneId: "Scene17" },
+          ],
+         },
+
+        // シーン22 銀の鍵
+        {
+          id: "Scene22",
+          background: "./images/Scene22.png",
+          character: null,
+          text: "通路の壁に鍵がかかっている。\nどこかで使うことができるのだろうか。",
+          choices: [
+            { text: "鍵を取る", nextSceneId: "Scene22_Get_Key" },
+            { text: "鍵を取らず来た道を戻る", nextSceneId: "Scene21"}
+          ],
+        },
+
+        {
+          id: "Scene22_Get_Key",
+          background: "./images/Scene22_Get_Key.png",
+          character: null,
+          text: "壁にかかっている銀色の鍵を手に取った。\nどこかで使えるといいのだが…。",
+          collectItem: {
+            id: "silver_key",
+            name: "銀の鍵",
+            description: "壁に掛かっていた銀の鍵",
+            icon: "./images/icon_silver_key.png"
+          },
+          choices: [
+            { text: "来た道を戻る", nextSceneId: "Scene21" }
+          ],
+        },
+        
+        {
+          id: "Scene22_Already_HaveSilverKey",
+          background: "./images/Scene22_Get_Key.png",
+          character: null,
+          text: "この部屋では先ほど銀の鍵を取得したため何もない。先を急ごう。",
+          choices: [
+            { text: "来た道を戻る", nextSceneId: "Scene21" }
+          ],
+        },
+
+        // シーン23 地下へ続く階段
+        {
+          id: "Scene23",
+          background: "./images/Scene23.png",
+          character: null,
+          text: "地下へと続く階段が続いている。\n足元に気を付けながら少しずつ前へと進もう。",
+          choices: [
+            { text: "下へ降りる", 
+                 conditionalBranching: {
+                    itemRequired: "normal_armor",
+                    trueSceneId: "Scene24_Already_HaveArmor",    // 普通の鎧を持っている場合
+                    falseSceneId: "Scene24" // 普通の鎧を持っていない場合
+                 }
+            },
+            { text: "来た道を戻る", nextSceneId: "Scene21" }
+          ],
+         },
+
+        // シーン24 地下通路
+        {
+          id: "Scene24",
+          background: "./images/Scene24.png",
+          character: null,
+          text: "この先に、強力な敵が潜んでいそうな嫌な気配がする…。\n防具なしで進むのは危険かもしれない。引き返そう。",
+          choices: [
+            { text: "来た道を戻る", nextSceneId: "Scene23" }
+          ],
+        },
+
+        {
+          id: "Scene24_Already_HaveArmor",
+          background: "./images/Scene24.png",
+          character: null,
+          text: "階段を下りた先は薄暗い地下通路になっていた。\n先に進むにつれどんどん暗くなっている。",
+          choices: [
+            { text: "前へ進む", nextSceneId: "Scene25" },
+            { text: "来た道を戻る", nextSceneId: "Scene23" }
+          ],
+        },
+
+        // シーン25 さらに奥へ
+        {
+          id: "Scene25",
+          background: "./images/Scene25.png",
+          character: null,
+          text: "通路はさらに奥へと続いている。\n先へ進むしかない。",
+          choices: [
+            { text: "前へ進む",
+                conditionalBranching: {
+                    itemRequired: "lamp",
+                    trueSceneId: "Scene26",    // ランプを持っている場合
+                    falseSceneId: "Scene26_notlamp" // ランプを持っていない場合
+                }
+            },
+            { text: "来た道を戻る", nextSceneId: "Scene24_Already_HaveArmor" }
+          ],
+        },
+
+        // シーン26 床に大きな裂け目(ランプを持ってる)
+        {
+          id: "Scene26",
+          background: "./images/Scene26.png",
+          character: null,
+          text: "先が真っ暗な部屋にたどり着いた。暗すぎて見えない…。",
+          choices: [
+            { text: "ランプを使う", nextSceneId: "Scene26_lamp_use" },
+            { text: "ランプを使わずに先に進む", nextSceneId: "Scene26_fall" },
+            { text: "来た道を戻る", nextSceneId: "Scene25" }
+          ],
+        },
+
+        // シーン26 床に大きな裂け目(ランプを持っていない)
+        {
+          id: "Scene26_notlamp",
+          background: "./images/Scene26.png",
+          character: null,
+          text: "真っ暗で何も見えない。\n明かりもないのにこのまま前へ進んで大丈夫だろうか。",
+          choices: [
+            { text: "前へ進む", nextSceneId: "Scene26_fall" },
+            { text: "来た道を戻る", nextSceneId: "Scene25" }
+          ],
+        },
+
+        // シーン26 ランプを使用した
+        {
+          id: "Scene26_lamp_use",
+          background: "./images/Scene26_lamp_use.png",
+          character: null,
+          text: "ランプを取り出すと大きな裂け目が足元にあった。\nランプがないと落ちて死んでしまったかもしれない。\nこれで裂け目を避けて通ることができそうだ。",
+          choices: [
+            { text: "大きな裂け目を避けて前に進む", nextSceneId: "Scene26_Alreadyuse_lamp" },
+            { text: "来た道を戻る", nextSceneId: "Scene25" }
+          ],
+        },
+
+        // シーン26 ランプを使用しない
+        {
+          id: "Scene26_fall",
+          background: "./images/Scene26.png",
+          character: null,
+          text: "先に進もうとすると足が地につかない…。\nなぜだろうと考える暇もなく裂け目に落ちてしまった。",
+          choices: [
+            { text: "次へ", nextSceneId: "GameOver" },
+          //hpChange: -100, // HP減少イベント
+          ],
+        },
+
+        // シーン26 ランプ使用後
+        {
+          id: "Scene26_Alreadyuse_lamp",
+          background: "./images/Scene26_lamp_use.png",
+          character: null,
+          text: "裂け目を下りると下りた時の勢いでランプの明かりが消えてしまった。\n戻ってもランプが使えないので戻れないだろう先へ進むしかない。",
+          useItem: { id: "lamp", consumeOnUse: true },
+          choices: [
+            { text: "右へ進む", 
+                conditionalBranching: {
+                    itemRequired: "Crystal",
+                    trueSceneId: "Scene27_Already_HaveCrystal",    // 水晶を持っている場合
+                    falseSceneId: "Scene27" // 水晶を持っていない場合
+                }
+            },
+            { text: "前へ進む", nextSceneId: "Scene29" }
+          ],
+        },
+
+       // シーン27 大きな水晶
+        {
+          id: "Scene27",
+          background: "./images/Scene27.png",
+          character: null,
+          text: "通路の真ん中に大きな水晶がある。\n大きくて全てを持っていくのは難しそうだ。\nこの水晶は何かの役に立つだろうか…。",
+          choices: [
+            { text: "水晶を手に入れる", nextSceneId: "Scene27_GetCrystal" },
+            { text: "水晶を無視して前へ進む", nextSceneId: "Scene28" },
+            { text: "来た道を戻る", nextSceneId: "Scene26_Alreadyuse_lamp" }
+          ],
+        },
+
+        {
+          id: "Scene27_GetCrystal",
+          background: "./images/Scene27.png",
+          text: "水晶の欠片をポケットに押し込んだ。\nいつか役に立つ時が来るだろうか。",
+          character: null,
+          collectItem: {
+            id: "Crystal",
+            name: "水晶",
+            description: "削って手に入れた水晶",
+            icon: "./images/icon_Crystal.png"
+          },
+          choices: [
+            { text: "前へ進む", nextSceneId: "Scene28" },
+            { text: "来た道を戻る", nextSceneId: "Scene26_Alreadyuse_lamp" }
+          ],
+        },
+
+        {
+          id: "Scene27_Already_HaveCrystal",
+          background: "./images/Scene27.png",
+          text: "もう少し水晶を持っていきたいがポケットが一杯だ。\n今は姫を救出する事に意識を集中しよう。",
+          character: null,
+          choices: [
+            { text: "前へ進む", nextSceneId: "Scene28" },
+            { text: "来た道を戻る", nextSceneId: "Scene26_Alreadyuse_lamp" }
+          ],
+        },
+
+        //シーン28 ボスの手下2遭遇～戦闘
+        {
+          id: "Scene28",
+          background: "./images/Scene28.png",
+          text: "ボスの邪魔はさせない！",
+          character: {
+            name: "ボスの手下2",
+            image: "./images/chara_Minions2.png",
+            position: "center"
+          },
+        },
+        
+        {
+          background: "./images/Scene28_Battle.png",
+          character: null,
+          text: "見逃してくれる気はなさそうだ。私は戦う決意をした。",
+        },
+        
+        {
+          id: "Scene28_Battle",
+          background: "./images/Scene28_Battle.png",
+          character: null,
+          text: "ボスの手下2が襲いかかってきた！",
+          battleMode: true,
+          enemy: {
+            id: "minions2",
+            name: "ボスの手下2",
+            maxHP: 30,
+            currentHP: 30,
+            attackPower: 8,
+            image: "./images/chara_Minions2.png"
+          },
+          onVictory: "Scene28_Victory",
+          onDefeat: "GameOver"
+        },
+        {
+          id: "Scene28_Victory",
+          background: "./images/Scene28_victory.png",
+          text: "ボスの手下2を倒した！\n何かの薬を手に入れたが、回復薬だろうか…？",
+          character: null,
+          choices: [
+            { text: "薬を飲む", nextSceneId: "Scene28_UseItem" },
+            { text: "薬を飲まない", nextSceneId: "Scene28_notUseItem" }
+          ],
+        },
+
+        {
+          id: "Scene28_UseItem",
+          background: "./images/Scene28_victory.png",
+          text: "薬は毒薬だったようだ…。\n\n辺りを見回したが、先に進む道はなさそうだ……戻って別の道を探そう。",
+          character: null,
+          nextSceneId: "Scene26_Alreadyuse_lamp",
+          hpChange: -5 // HP減少イベント
+        },
+
+        {
+          id: "Scene28_notUseItem",
+          background: "./images/Scene28_victory.png",
+          text: "怪しいので飲むのは止めておこう。\n\n辺りを見回したが、先に進む道はなさそうだ……戻って別の道を探そう。",
+          character: null,
+          nextSceneId: "Scene26_Alreadyuse_lamp",
+        },
+
+
+        // シーン29 上への梯子
+        {
+          id: "Scene29",
+          background: "./images/Scene29.png",
+          character: null,
+          text: "上への梯子を見つけた。\nこのまま先に続いていそうだ。",
+          choices: [
+            { text: "上に上る", nextSceneId: "Scene30" },
+            { text: "来た道を戻る", nextSceneId: "Scene26_Alreadyuse_lamp" }
+          ],
+        },
+
+        // シーン30 前への通路
+        {
+          id: "Scene30",
+          background: "./images/Scene30.png",
+          character: null,
+          text: "梯子を上ると前に進む通路があった。\nこのまま先へ急ごう。",
+          choices: [
+            { text: "前へ進む", nextSceneId: "Scene31" },
+            { text: "来た道を戻る", nextSceneId: "Scene29"}
+          ],
+        },
+
+        // シーン31 上と前の分岐
+        {
+          id: "Scene31",
+          background: "./images/Scene31.png",
+          text: "通路はさらに続き上につながっている。\n前へも進めそうだが\rさてどうしようか。",
+          choices: [
+            { text: "上へ進む", nextSceneId: "Scene32" },
+            { text: "前へ進む", nextSceneId: "Scene34" },
+            { text: "来た道を戻る", nextSceneId: "Scene30"}
+          ],
+        },
+
+        // シーン32 落ちているメモ
+        {
+          id: "Scene32",
+          background: "./images/Scene32.png",
+          text: "血の付いた不気味なメモが落ちている。\n何が書いてあるか気になるが…。",
+          choices: [
+            { text: "メモを読む", nextSceneId: "Scene32_ReadMemo" },
+            { text: "メモを読まないで進む", nextSceneId: "Scene33" },
+            { text: "来た道を戻る", nextSceneId: "Scene31" }
+          ],
+        },
+        
+        {
+          id: "Scene32_ReadMemo",
+          background: "./images/Scene32.png",
+          text: "「青い薬で極楽へ\r赤い薬で希望は続く\nしかし黄金は全てを逆転させる」\n…よくわからないが覚えておくか。",
+          choices: [
+            { text: "前に進む", nextSceneId: "Scene33" },
+            { text: "来た道を戻る", nextSceneId: "Scene31" }
+          ],
+        },
+
+        // シーン33 敵と遭遇～戦闘
+        {
+          id: "Scene33",
+          background: "./images/Scene33.png",
+          character: null,
+          text: "道を進んだ先にウィザードが現れた…。",
+          choices: [
+            { text: "戦う", nextSceneId: "Scene33_Battle"},
+            { text: "逃げられる機会を伺う", nextSceneId: "Scene33_RunAway"}
+          ],
+        },
+        {
+          id: "Scene33_Battle",
+          background: "./images/Scene33.png",
+          character: null,
+          text: "ウィザードが襲いかかってきた！",
+          battleMode: true,
+          enemy: {
+            id: "wizard",
+            name: "ウィザード",
+            maxHP: 25,
+            currentHP: 25,
+            attackPower: 5,
+            image: "./images/chara_Wizard.png"
+          },
+          onVictory: "Scene33_Victory",
+          onDefeat: "GameOver"
+        },
+        {
+          id: "Scene33_Victory",
+          background: "./images/Scene33_victory.png",
+          text: "ウィザードを倒した！\n何かの薬を手に入れたが、回復薬だろうか…？",
+          character: null,
+          choices: [
+            { text: "薬を飲む", nextSceneId: "Scene33_UseItem" },
+            { text: "薬を飲まない", nextSceneId: "Scene33_notUseItem" }
+          ]
+        },
+        {
+          id: "Scene33_UseItem",
+          background: "./images/Scene33_victory.png",
+          text: "薬は回復薬だったようだ。\n\n傷も癒えたので辺りを見回したが、先に進む道はなさそうだ……戻って別の道を探そう。",
+          character: null,
+          nextSceneId: "Scene32",
+          hpChange: +100 // HP回復イベント
+        },
+        {
+          id: "Scene33_notUseItem",
+          background: "./images/Scene33_victory.png",
+          text: "怪しいので飲むのは止めておこう。\n\n辺りを見回したが、先に進む道はなさそうだ……戻って別の道を探そう。",
+          character: null,
+          nextSceneId: "Scene32",
+        },
+        {
+          id: "Scene33_RunAway",
+          background: "./images/Scene33.png",
+          text: "今魔物と戦っても勝てる見込みはなさそうだ。\n背を向けた途端に襲われそうなのでジリジリと間合いを広げながら逃げられる隙を伺った。\n\n今だ！ともと来た道を走り出した瞬間にシュッと何かが腕をかすめた。\n無我夢中で走るうちに、どうやら撒けたようでアイツは居ない。別の道を進んでみよう。",
+          character: null,
+          nextSceneId: "Scene32",
+          hpChange: -2.5 // HP減少イベント
+        },
+
+        // シーン34 先に進む
+        {
+          id: "Scene34",
+          background: "./images/Scene34.png",
+          character: null,
+          text: "分岐を進んだ先にまだまだ通路がある。\n急いで先へ向かおう。",
+          choices: [
+            { text: "前へ進む", nextSceneId: "Scene35" },
+            { text: "来た道を戻る", nextSceneId: "Scene31" }
+          ],
+        },
+
+        // シーン35 地下への階段
+        {
+          id: "Scene35",
+          background: "./images/Scene35.png",
+          character: null,
+          text: "地下への階段を見つけた。\nおそらくこの先は最深部だろう。気を引き締めていかないと。",
+          choices: [
+            { text: "下へ降りる", nextSceneId: "Scene36" },
+            { text: "来た道を戻る", nextSceneId: "Scene34" }
+          ],
+        },
+
+        
+        // シーン36 最深部へ
+        {
+          id: "Scene36",
+          background: "./images/Scene36.png",
+          text: "階段を下りた先は最深部へとつながっていた。\nこれから先は強敵が多くなりそうだ。",
+          choices: [
+            { text: "前へ進む", nextSceneId: "Scene37" },
+            { text: "来た道を戻る", nextSceneId: "Scene35"}
+          ],
+        },
+
+       // シーン37 扉の前の眠った門番
+        {
+          id: "Scene37",
+          background: "./images/Scene37.png",
+          character: null,
+          text: "扉の前で門番が眠っている。\n他に進める道もあるが…さて、どうしようか。",
+          choices: [
+            { text: "物音を立てずに扉に近づく",
+                    conditionalBranching: {
+                    itemRequired: "copper_key",
+                    trueSceneId: "Scene37_Entertheroom",    // 銅の鍵を持っている場合
+                    falseSceneId: "Scene37_NotEntertheroom" // 銅の鍵を持っていない場合
+                }
+            },
+            { text: "扉に近づく", nextSceneId: "Scene37_Wakeup" },
+            { text: "扉を無視して別の道へ進む", nextSceneId: "Scene39" },
+            { text: "来た道を戻る", nextSceneId: "Scene36" }
+          ],
+        },
+
+        // シーン37 起こす
+        {
+          id: "Scene37_Wakeup",
+          background: "./images/Scene37_WakeUp.png",
+          character: null,
+          text: "物音で門番が起きてしまった。\n眠りを妨げられて怒っている。\n怒っている門番には歯が立たなかった。",
+          choices: [
+            { text: "次へ", nextSceneId: "GameOver" }
+          ],
+        },
+
+        // シーン37 部屋に入る
+        {
+          id: "Scene37_Entertheroom",
+          background: "./images/Scene37_enter.png",
+          character: null,
+          text: "扉には鍵がかかっていたが、持っていた銅の鍵で扉は開いた。\n怪しい雰囲気だがこのまま部屋に入るか…。",
+          choices: [
+            { text: "部屋に入る", nextSceneId: "Scene38" },
+            { text: "部屋に入らず別の道へ進む", nextSceneId: "Scene39" },
+            { text: "来た道を戻る", nextSceneId: "Scene36" }
+          ],
+        },
+
+        // シーン37 部屋に入れない(鍵なし)
+        {
+          id: "Scene37_NotEntertheroom",
+          background: "./images/Scene37.png",
+          character: null,
+          text: "扉には鍵がかかっていた。\nこの扉の鍵は持っていないので今はあきらめよう。",
+          choices: [
+            { text: "扉を無視して別の道へ進む", nextSceneId: "Scene39" },
+            { text: "来た道を戻る", nextSceneId: "Scene36" }
+          ],
+        },
+
+        // シーン38 トラップ即死
+        {
+          id: "Scene38",
+          background: "./images/Scene38.png",
+          character: null,
+          text: "静かに部屋に入って扉を閉めた直後、扉が閉まって出られなくなってしまった。\nおまけに天井が下がってきて迫ってくる……。\n打開策がない私になす術はなかった…。",
+          choices: [
+            { text: "次へ", nextSceneId: "GameOver" },
+          //hpChange: -100, // HP減少イベント
+          ],
+        },
+
+        // シーン39 上へ上る梯子
+        {
+          id: "Scene39",
+          background: "./images/Scene39.png",
+          character: null,
+          text: "上へと続く梯子を見つけた\nとても静かな空間で不気味だ…。",
+          choices: [
+            { text: "上にのぼる", nextSceneId: "Scene40" },
+            { text: "来た道を戻る", nextSceneId: "Scene37" }
+          ],
+        },
+
+        // シーン40 上と前の分岐
+        {
+          id: "Scene40",
+          background: "./images/Scene40.png",
+          character: null,
+          text: "梯子を上るとまだ上に進む道と前に進む道に分かれていた。\nさてどちらに進むべきだろうか。",
+          choices: [
+            { text: "階段を上る", nextSceneId: "Scene41" },
+            { text: "奥に進む", nextSceneId: "Scene43" },
+            { text: "来た道を戻る", nextSceneId: "Scene39"}
+          ],
+        },
+
+		// シーン41 奥へ続く通路
+        {
+          id: "Scene41",
+          background: "./images/Scene41.png",
+          character: null,
+          text: "奥へと道が続いている。\n道の先から何やら神聖な気配が漂っている。",
+          choices: [
+            { text: "奥へ進む", 
+                conditionalBranching: {
+                    itemRequired: "legendary_armor",
+                    trueSceneId: "Scene42_Already_Have_Legendary_Armor",    // 伝説の鎧を持っている場合
+                    falseSceneId: "Scene42_Get_Legendary_Armor" // 伝説の鎧を持っていない場合
+                }
+            },
+            { text: "来た道を戻る", nextSceneId: "Scene40" }
+          ],
+        },
+
+        // シーン42 伝説の鎧入手
+        {
+          id: "Scene42_Get_Legendary_Armor",
+          background: "./images/Scene42.png",
+          text: "泉がある。\n近づくと着ていた鎧が輝きだし、伝説の鎧に変化した！\n看板があり「宝物と武器を差し出せ…」と書いてある。何か持っているもので使えそうな物はないか…。",
+          character: null,
+          collectItem: {
+            id: "legendary_armor",
+            name: "伝説の鎧",
+            description: "伝説と呼ばれるにふさわしい鎧",
+            icon: "./images/icon_legendary_armor.png"
+          },
+          useItem: { id: "normal_armor", consumeOnUse: true },
+          choices: [
+            { text: "アイテムを使ってみる", nextSceneId: "Scene42_Choose_Item" },
+            { text: "来た道を戻る", nextSceneId: "Scene41" }
+          ],
+        },
+
+        {
+          id: "Scene42_Already_Have_Legendary_Armor",
+          background: "./images/Scene42.png",
+          text: "すでに伝説の鎧を手に入れている…。\n看板があり「宝物と武器を差し出せ…」と書いてある。何か持っているもので使えそうな物はないか…。",
+          character: null,
+          choices: [
+            { text: "アイテムを使ってみる", 
+                    conditionalBranching: {
+                    itemRequired: "legendary_sword",
+                    trueSceneId: "Scene42_Already_Have_Legendary_Sword",    // 伝説の剣を持っている場合
+                    falseSceneId: "Scene42_Choose_Item" // 伝説の剣を持っていない場合
+                }
+            },
+            { text: "来た道を戻る", nextSceneId: "Scene41" }
+          ],
+        },
+
+       // シーン42 アイテム選択
+        {
+          id: "Scene42_Choose_Item",
+          background: "./images/Scene42.png",
+          character: null,
+          text: "宝物はどれにしようか…？",
+          choices: [
+            { text: "金貨を投げ入れる",
+                    conditionalBranching: {
+                    itemRequired: "gold_coin",
+                    trueSceneId: "Scene42_Miss_gold_coin",    // 金貨を持っている場合
+                    falseSceneId: "Scene42_Dont_Have_Item" // 金貨を持っていない場合
+                }
+            },
+            { text: "水晶を投げ入れる",
+                    conditionalBranching: {
+                    itemRequired: "Crystal",
+                    trueSceneId: "Scene42_Choose_Wepon",    // 水晶を持っている場合
+                    falseSceneId: "Scene42_Dont_Have_Item" // 水晶を持っていない場合
+                }
+            }
+          ],
+        },
+
+       // シーン42 武器選択
+        {
+          id: "Scene42_Choose_Wepon",
+          background: "./images/Scene42.png",
+          character: null,
+          text: "武器はどれにしようか…？",
+          useItem: { id: "Crystal", consumeOnUse: true },
+          choices: [
+            { text: "短剣を投げ入れる",
+                    conditionalBranching: {
+                    itemRequired: "short_sword",
+                    trueSceneId: "Scene42_Miss_weapon",    // 短剣を持っている場合
+                    falseSceneId: "Scene42_Dont_Have_Item" // 短剣を持っていない場合
+                }
+            },
+            { text: "誰かの剣を投げ入れる",
+                    conditionalBranching: {
+                    itemRequired: "normal_sword",
+                    trueSceneId: "Scene42_Miss_weapon",    // 誰かの剣を持っている場合
+                    falseSceneId: "Scene42_Dont_Have_Item" // 誰かの剣を持っていない場合
+                }
+            },
+            { text: "折れた剣を投げ入れる",
+                    conditionalBranching: {
+                    itemRequired: "broken_sword",
+                    trueSceneId: "Scene42_Get_Legendary_Sword",    // 折れた剣を持っている場合
+                    falseSceneId: "Scene42_Dont_Have_Item" // 折れた剣を持っていない場合
+                }
+            },
+            { text: "斧を投げ入れる",
+                    conditionalBranching: {
+                    itemRequired: "Aex",
+                    trueSceneId: "Scene42_Miss_weapon",    // 斧を持っている場合
+                    falseSceneId: "Scene42_Dont_Have_Item" // 斧を持っていない場合
+                }
+            }
+          ],
+        },
+
+       // シーン42 アイテム未所持
+        {
+          id: "Scene42_Dont_Have_Item",
+          background: "./images/Scene42.png",
+          character: null,
+          text: "投げ入れようとしたが、選択したアイテムが手持ちになかった。",
+          choices: [
+            { text: "来た道を戻る", nextSceneId: "Scene41" }
+          ],
+        },
+
+       // シーン42 はずれ（金貨）
+        {
+          id: "Scene42_Miss_gold_coin",
+          background: "./images/Scene42.png",
+          character: null,
+          text: "金貨を入れても何も変化がなかった。\n金貨はなくなってしまった…。",
+          useItem: { id: "Gold_Coin", consumeOnUse: true },
+          choices: [
+            { text: "来た道を戻る", nextSceneId: "Scene41" }
+          ],
+        },
+
+       // シーン42 はずれ（武器）
+        {
+          id: "Scene42_Miss_weapon",
+          background: "./images/Scene42.png",
+          character: null,
+          text: "武器を入れても何も変化がなかった…武器だけは回収しておこう。",
+          choices: [
+            { text: "来た道を戻る", nextSceneId: "Scene41" }
+          ],
+        },
+
+        // シーン42 伝説の剣入手
+        {
+          id: "Scene42_Get_Legendary_Sword",
+          background: "./images/Scene42.png",
+          text: "なんと…!!折れた剣は伝説の剣となって戻ってきた!!",
+          character: null,
+          collectItem: {
+            id: "legendary_sword",
+            name: "伝説の剣",
+            description: "伝説と呼ばれるにふさわしい剣",
+            icon: "./images/icon_sword.png",
+            weaponStats: {
+              attackPower: 30, //攻撃力
+              accuracy: 90, //命中率
+              criticalRate: 5 //クリティカル率
+            }
+          },
+          useItem: { id: "broken_sword", consumeOnUse: true },
+          choices: [
+            { text: "来た道を戻る", nextSceneId: "Scene41" }
+          ],
+        },
+
+        {
+          id: "Scene42_Already_Have_Legendary_Sword",
+          background: "./images/Scene42.png",
+          text: "アイテム投げ入れようとしたが、すでに伝説の剣を入手しているためやめておこう。",
+          character: null,
+          choices: [
+            { text: "来た道を戻る", nextSceneId: "Scene41" }
+          ],
+        },
+
+        // シーン43 大階段
+        {
+          id: "Scene43",
+          background: "./images/Scene43.png",
+          character: null,
+          text: "目の前には見上げるような大きな階段があった。\n上った先には何があるのだろうか。",
+          choices: [
+            { text: "階段を上る", 
+                conditionalBranching: {
+                    itemRequired: "Aex",
+                    trueSceneId: "Scene44_Already_HaveAex",    // 斧を持っている場合
+                    falseSceneId: "Scene44" // 斧を持っていない場合
+                }
+            },
+            { text: "来た道を戻る", nextSceneId: "Scene40" }
+          ],
+        },
+
+        // シーン44 斧の取得
+        {
+          id: "Scene44",
+          background: "./images/Scene44.png",
+          character: null,
+          text: "斧が落ちている。",
+          choices: [
+            { text: "斧を手に入れる", nextSceneId: "Scene44_GetAex" },
+            { text: "斧を無視して前へ進む", nextSceneId: "Scene45" },
+            { text: "来た道を戻る", nextSceneId: "Scene43" }
+          ],
+        },
+        
+        {
+          id: "Scene44_GetAex",
+          background: "./images/Scene44_GetAex.png",
+          text: "斧を拾った。",
+          character: null,
+          collectItem: {
+            id: "Aex",
+            name: "斧",
+            description: "拾った斧",
+            icon: "./images/icon_Aex.png",
+            weaponStats: {
+              attackPower: 15, //攻撃力
+              accuracy: 90, //命中率
+              criticalRate: 5 //クリティカル率
+            }
+          },
+          choices: [
+            { text: "前へ進む", nextSceneId: "Scene45" },
+            { text: "来た道を戻る", nextSceneId: "Scene43" }
+          ],
+        },
+
+        {
+          id: "Scene44_Already_HaveAex",
+          background: "./images/Scene44_GetAex.png",
+          text: "斧を拾ってしまったため、何もない。",
+          character: null,
+          choices: [
+            { text: "前へ進む", nextSceneId: "Scene45" },
+            { text: "来た道を戻る", nextSceneId: "Scene43" }
+          ],
+        },
+
+        // シーン45 前と左の分岐
+        {
+          id: "Scene45",
+          background: "./images/Scene45.png",
+          character: null,
+          text: "前と左に道が続いている。",
+          choices: [
+            { text: "前へ進む", nextSceneId: "Scene46" },
+            { text: "左へ進む", nextSceneId: "Scene47" },
+            { text: "来た道を戻る", 
+                conditionalBranching: {
+                    itemRequired: "Aex",
+                    trueSceneId: "Scene44_Already_HaveAex",    // 斧を持っている場合
+                    falseSceneId: "Scene44" // 斧を持っていない場合
+                }
+            }
+          ],
+        },
+
+        // シーン46 敵と遭遇～戦闘
+        {
+          id: "Scene46",
+          background: "./images/Scene46.png",
+          character: null,
+          text: "道を進んだ先にオークが現れた…。",
+          choices: [
+            { text: "戦う", nextSceneId: "Scene46_Battle"},
+            { text: "逃げられる機会を伺う", nextSceneId: "Scene46_RunAway"}
+          ],
+        },
+        {
+          id: "Scene46_Battle",
+          background: "./images/Scene46.png",
+          character: null,
+          text: "オークが襲いかかってきた！",
+          battleMode: true,
+          enemy: {
+            id: "orc",
+            name: "オーク",
+            maxHP: 50,
+            currentHP: 50,
+            attackPower: 8,
+            image: "./images/chara_Monster2.png"
+          },
+          onVictory: "Scene46_Victory",
+          onDefeat: "GameOver"
+        },
+        {
+          id: "Scene46_Victory",
+          background: "./images/Scene46_victory.png",
+          text: "オークを倒した！\n何かの薬を手に入れたが、回復薬だろうか…？",
+          character: null,
+          choices: [
+            { text: "薬を飲む", nextSceneId: "Scene46_UseItem" },
+            { text: "薬を飲まない", nextSceneId: "Scene46_notUseItem" }
+          ]
+        },
+        {
+          id: "Scene46_UseItem",
+          background: "./images/Scene46_victory.png",
+          text: "薬は毒薬だったようだ…。\n\n辺りを見回したが、先に進む道はなさそうだ……戻って別の道を探そう。",
+          character: null,
+          nextSceneId: "Scene45",
+          hpChange: -5 // HP減少イベント
+        },
+        {
+          id: "Scene46_notUseItem",
+          background: "./images/Scene46_victory.png",
+          text: "怪しいので飲むのは止めておこう。\n\n辺りを見回したが、先に進む道はなさそうだ……戻って別の道を探そう。",
+          character: null,
+          nextSceneId: "Scene45",
+        },
+        {
+          id: "Scene46_RunAway",
+          background: "./images/Scene46.png",
+          text: "今魔物と戦っても勝てる見込みはなさそうだ。\n背を向けた途端に襲われそうなのでジリジリと間合いを広げながら逃げられる隙を伺った。\n\n今だ！ともと来た道を走り出した瞬間にシュッと何かが腕をかすめた。\n無我夢中で走るうちに、どうやら撒けたようでアイツは居ない。別の道を進んでみよう。",
+          character: null,
+          nextSceneId: "Scene45",
+          hpChange: -2.5 // HP減少イベント
+        },
+
+        //シーン47 ドラゴン遭遇～戦闘
+        {
+          id: "Scene47",
+          background: "./images/Scene47.png",
+          text: "ギャオオオオオ！",
+          character: {
+            name: "ドラゴン",
+            image: "./images/chara_Dragon.png",
+            position: "center"
+          },
+        },
+        {
+          background: "./images/Scene47_Battle.png",
+          character: null,
+          text: "凄まじい殺気を放っている…見逃してくれる気はなさそうだ。私は戦う決意をした。",
+        },
+        {
+          id: "Scene47_Battle",
+          background: "./images/Scene47_Battle.png",
+          character: null,
+          text: "ドラゴンが襲いかかってきた！",
+          battleMode: true,
+          enemy: {
+            id: "dragon",
+            name: "ドラゴン",
+            maxHP: 75,
+            currentHP: 75,
+            attackPower: 8,
+            image: "./images/chara_Dragon.png"
+          },
+          onVictory: "Scene47_Victory",
+          onDefeat: "GameOver"
+        },
+        {
+          id: "Scene47_Victory",
+          background: "./images/Scene47_Victory.png",
+          text: "ドラゴンを倒した！\n何かの薬を手に入れたが、回復薬だろうか…？",
+          character: null,
+          choices: [
+            { text: "薬を飲む", nextSceneId: "Scene47_UseItem" },
+            { text: "薬を飲まない", nextSceneId: "Scene47_SelectScene" }
+          ]
+        },
+        {
+          id: "Scene47_UseItem",
+          background: "./images/Scene47_Victory.png",
+          text: "薬は回復薬だったようだ。戦いの傷はすっかり癒えてしまった。",
+          character: null,
+          nextSceneId: "Scene47_SelectScene",
+          hpChange: +100 // HP回復イベント
+        },
+        {
+          id: "Scene47_SelectScene",
+          background: "./images/Scene47_Victory.png",
+          text: "さて、どちらに進もうか…。",
+          character: null,
+          choices: [
+            { 
+              text: "前へ進む",
+               nextSceneId: "Scene9",
+                conditionalBranching: {
+                    itemRequired: "gold_key",
+                    trueSceneId: "Scene48_Already_Havegold_key", // 金の鍵を持っている場合
+                    falseSceneId: "Scene48" // 金の鍵を持っていない場合
+                }
+            },
+            { text: "来た道を戻る", nextSceneId: "Scene45"}
+          ],
+        },
+
+        // シーン48 金の鍵
+        {
+          id: "Scene48",
+          background: "./images/Scene48.png",
+          character: null,
+          text: "宝箱が落ちている。\n鍵はかかっていないようだ。\n中には金の鍵が入っている。",
+          choices: [	
+            { text: "金の鍵を手に入れる", nextSceneId: "Scene48_Getgold_key" },
+            { text: "金の鍵を無視して先へ進む", nextSceneId: "Scene49" },
+            { text: "来た道を戻る", nextSceneId: "Scene47" }
+          ],
+        },
+
+        {
+          id: "Scene48_Getgold_key",
+          background: "./images/Scene48＿Getkey.png",
+          text: "金の鍵をそっと手にした。\n重みが静かに伝わってくる。",
+          character: null,
+          collectItem: {
+            id: "gold_key",
+            name: "金の鍵",
+            description: "宝箱から手に入れた金の鍵",
+            icon: "./images/icon_gold_key.png"
+          },
+          choices: [
+            { text: "先へ進む", nextSceneId: "Scene49" },
+            { text: "来た道を戻る", nextSceneId: "Scene47" }
+          ],
+        },
+
+        {
+          id: "Scene48_Already_Havegold_key",
+          background: "./images/Scene48_Getgold_key.png",
+          text: "宝箱は静かに佇んでいる。\n中を覗いても、もう何も見つからない。",
+          character: null,
+          choices: [
+            { text: "先へ進む", nextSceneId: "Scene49" },
+            { text: "来た道を戻る", nextSceneId: "Scene47" }
+          ],
+        },
+
+
+    // シーン49 最深部へ
+        {
+          id: "Scene49",
+          background: "./images/Scene49.png",
+          character: null,
+          text: "深淵へと誘う通路が奥へと続いている。\n静かに歩みを進めるしかない。",
+          choices: [
+            { text: "前へ進む", nextSceneId: "Scene50" },
+            { text: "来た道を戻る",
+                    conditionalBranching: {
+                    itemRequired: "gold_key",
+                    trueSceneId: "Scene48_Already_Havegold_key",    // 金の鍵を持っている場合
+                    falseSceneId: "Scene48" // 金の鍵を持っていない場合
+                }
+            },
+          ],
+        },
+
+    // シーン50 青い薬と赤い薬
+        {
+          id: "Scene50",
+          background: "./images/Scene50.png",
+          character: null,
+          text: "青い薬か赤い薬を飲む。",
+          choices: [
+            { text: "青い薬を飲む",
+                    conditionalBranching: {
+                    itemRequired: "gold_key",
+                    trueSceneId: "Scene52",    // 金の鍵を持っている場合
+                    falseSceneId: "Scene51" // 金の鍵を持っていない場合
+                }
+            },
+            { text: "赤い薬を飲む",
+                    conditionalBranching: {
+                    itemRequired: "gold_key",
+                    trueSceneId: "Scene51",    // 金の鍵を持っている場合
+                    falseSceneId: "Scene52" // 金の鍵を持っていない場合
+                }
+            },
+            { text: "薬を飲まずに先に進む", nextSceneId: "Scene50_Loop1" },
+            { text: "来た道を戻る", nextSceneId: "Scene49" }
+          ],
+        },
+
+       // シーン50 ループ1
+        {
+          id: "Scene50_Loop1",
+          background: "./images/Scene50_Loop1.png",
+          character: null,
+          text: "薬を飲まなかった場合のループ1",
+          choices: [
+            { text: "前へ進む", nextSceneId: "Scene50_Loop2" },
+            { text: "左へ進む", nextSceneId: "Scene50" },
+            { text: "来た道を戻る", nextSceneId: "Scene50" }
+          ],
+        },
+
+       // シーン50 ループ2
+        {
+          id: "Scene50_Loop2",
+          background: "./images/Scene50_Loop2.png",
+          character: null,
+          text: "薬を飲まなかった場合のループ2",
+          choices: [
+            { text: "前へ進む", nextSceneId: "Scene50_Loop3" },
+            { text: "左へ進む", nextSceneId: "Scene50" },
+            { text: "来た道を戻る", nextSceneId: "Scene50_Loop1" }
+          ],
+        },
+
+       // シーン50 ループ3
+        {
+          id: "Scene50_Loop3",
+          background: "./images/Scene50_Loop3.png",
+          character: null,
+          text: "薬を飲まなかった場合のループ3",
+          choices: [
+            { text: "左へ進む", nextSceneId: "Scene50" },
+            { text: "来た道を戻る", nextSceneId: "Scene50_Loop2" }
+          ],
+        },
+
+        // シーン51 トラップ即死
+        {	
+          id: "Scene51",
+          background: "./images/Scene51.png",
+          character: null,
+          text: "飲んだ薬が毒薬で即死する。",
+          choices: [
+            { text: "次へ", nextSceneId: "GameOver" }
+          //hpChange: -100, // HP減少イベント
+          ],
+        },
+
+        // シーン52 隠し通路
+        {
+          id: "Scene52",
+          background: "./images/Scene52.png",
+          character: null,
+          text: "隠し通路を見つけた。",
+          choices: [
+            { text: "隠し通路へ進む", nextSceneId: "Scene53" },
+            { text: "来た道を戻る", nextSceneId: "Scene50"}
+          ],
+        },
+
+        // シーン53 下へ降りる階段
+        {
+          id: "Scene53",
+          background: "./images/Scene53.png",
+          character: null,
+          text: "下に降りる階段を見つけた。\nどこかで獣のうなり声がした気がしたが気のせいだろうか…。",
+          choices: [
+            { text: "下へ降りる", nextSceneId: "Scene54" },
+            { text: "来た道を戻る", nextSceneId: "Scene52" }
+          ],
+        },
+
+        // シーン54 ボス前
+        {
+          id: "Scene54",
+          background: "./images/Scene54.png",
+          text: "よくここまでたどり着いた。\nしかしそれもここまでだ。\nここで大人しく土に還れ！",
+          character: {
+            name: "ボス",
+            image: "./images/chara_Boss.png",
+            position: "center"
+          },
+        },
+        {
+          background: "./images/Scene54_Battle.png",
+          character: null,
+          text: "凄まじい殺気を放っている…。私は戦う決意をした。",
+          choices: [
+            { 
+              text: "次へ", 
+                conditionalBranching: {
+                    itemRequired: "legendary_armor",
+                    trueSceneId: "Scene55_With_LegendaryArmor", // 伝説の鎧を持っている場合
+                    falseSceneId: "Scene55_No_LegendaryArmor" // 伝説の鎧を持っていない場合
+                }
+            }
+          ],
+        },
+
+        //シーン55 ボス
+        {
+          id: "Scene55_With_LegendaryArmor",
+          background: "./images/Scene55.png",
+          character: null,
+          text: "ボスが襲いかかってきた！",
+          battleMode: true,
+          enemy: {
+            id: "boss",
+            name: "ボス",
+            maxHP: 150,
+            currentHP: 150,
+            attackPower: 8,
+            image: "./images/Boss.png"
+          },
+          onVictory: "Scene55_Victory",
+          onDefeat: "GameOver"
+        },
+        {
+          id: "Scene55_No_LegendaryArmor",
+          background: "./images/Scene55.png",
+          character: null,
+          text: "ボスが襲いかかってきた！",
+          battleMode: true,
+          enemy: {
+            id: "boss",
+            name: "ボス",
+            maxHP: 150,
+            currentHP: 150,
+            attackPower: 30,
+            image: "./images/chara_Boss.png"
+          },
+          onVictory: "Scene55_Victory",
+          onDefeat: "GameOver"
+        },
+        {
+          id: "Scene55_Victory",
+          background: "./images/Scene55_victory.png",
+          text: "ボスを倒した！\n何かの薬を手に入れたが、回復薬だろうか…？",
+          character: null,
+          choices: [
+            { text: "薬を飲む", nextSceneId: "Scene55_UseItem" },
+            { text: "薬を飲まない", nextSceneId: "Scene55_SelectScene" }
+          ]
+        },
+        {
+          id: "Scene55_UseItem",
+          background: "./images/Scene55_victory.png",
+          text: "薬は回復薬だったようだ。戦いの傷はすっかり癒えてしまった。",
+          character: null,
+          hpChange: +100 // HP回復イベント
+        },
+        {
+          id: "Scene55_SelectScene",
+          background: "./images/Scene55_victory.png",
+          text: "さて、どちらに進もうか…。",
+          character: null,
+          choices: [
+            { text: "前へ進む", nextSceneId: "Scene56"},
+            { text: "来た道を戻る", nextSceneId: "Scene53"}
+          ],
+        },
+
+        // シーン56 金の鍵で開ける扉
+        {
+          id: "Scene56",
+          background: "./images/Scene56.png",
+          character: null,
+          text: "前方に扉があるので開けて進もう。",
+          choices: [
+            { 
+              text: "扉を開ける",
+                conditionalBranching: {
+                    itemRequired: "gold_key",
+                    trueSceneId: "Scene56_open",    // 金の鍵を持っている場合
+                    falseSceneId: "Scene56_close" // 金の鍵を持っていない場合
+                }
+            },
+            { text: "来た道を戻る", nextSceneId: "Scene54" }
+          ],
+        },
+
+        // シーン56 金の鍵を持っているので扉を開けられる
+        {
+          id: "Scene56_open",
+          background: "./images/Scene56_open.png",
+          character: null,
+          text: "金の鍵で扉を開けられた。\nこれで先に進めそうだ。",
+          choices: [
+            { 
+              text: "先へ進む",
+                conditionalBranching: {
+                    itemRequired: "ring",
+                    trueSceneId: "Scene57_Already_SavedPrincess",    // 指輪を持っている場合
+                    falseSceneId: "Scene57" // 指輪を持っていない場合
+                }
+            },
+            { text: "来た道を戻る", nextSceneId: "Scene54" }
+          ],
+        },
+
+        // シーン56 金の鍵を持ってないので扉を開けられない
+        {
+          id: "Scene56_close",
+          background: "./images/Scene56.png",
+          character: null,
+          text: "扉を開けられない。\n引き返そう。",
+          choices: [
+            { text: "来た道を戻る", nextSceneId: "Scene54" }
+          ],
+        },
+
+        // シーン57 姫救出
+        {
+          id: "Scene57",
+          background: "./images/Scene57.png",
+          text: "捕らわれていた姫を見つけた。"
+        },
+        {
+          id: "Scene57_talk1",
+          background: "./images/Scene57_talk.png",
+          text: "姫様！助けに来ました。\nさあ、私と共に帰りましょう。",
+          character: {
+            name: "主人公",
+            image: "./images/chara_hero.png",
+            position: "right"
+          },
+        },
+        {
+          id: "Scene57_talk2",
+          background: "./images/Scene57_talk.png",
+          character: {
+            name: "姫様",
+            image: "./images/chara_princess.png",
+            position: "left"
+          },
+          text: "……本当に、終わったのですね。",
+          choices: null,
+        },
+        {
+          id: "Scene57_talk3",
+          background: "./images/Scene57_talk.png",
+          character: {
+            name: "主人公",
+            image: "./images/chara_hero.png",
+            position: "right"
+          },
+          text: "ええ、もう大丈夫です。",
+          choices: null,
+        },
+        {
+          id: "Scene57_talk4",
+          background: "./images/Scene57_talk.png",
+          character: {
+            name: "姫様",
+            image: "./images/chara_princess.png",
+            position: "left"
+          },
+          collectItem: {
+            id: "ring",
+            name: "指輪",
+            description: "王家に伝わる指輪",
+            icon: "./images/icon_ring.png"
+          },
+          text: "助けていただいて、ありがとうございます。\nこれは、王家に代々伝わる指輪です。\n私を救ってくれたあなたに差し上げます。",
+          choices: null,
+        },
+        {
+          id: "Scene57_talk5",
+          background: "./images/Scene57_talk.png",
+          character: {
+            name: "主人公",
+            image: "./images/chara_hero.png",
+            position: "right"
+          },
+          text: "大切にします。\nさあ、帰りましょう。\n皆が待っています。"
+        },
+        {
+          id: "Scene57_talk6",
+          background: "./images/Scene57_talk.png",
+          text: "無事に姫を救出することが出来た。\n後はここから脱出するだけだ。油断せずに進んでいこう。",
+          choices: [
+            { text: "前へ進む", nextSceneId: "Scene58" },
+            { text: "来た道を戻る", nextSceneId: "Scene56" }
+          ],
+        },
+
+        // シーン57 既に姫救出済み
+        {
+          id: "Scene57_Already_SavedPrincess",
+          background: "./images/Scene57_Already_SavedPrincess.png",
+          character: null,
+          text: "既に姫は救出済みだ。\nここには何もない。",
+          choices: [
+            { text: "前へ進む", nextSceneId: "Scene58" },
+            { text: "来た道を戻る", nextSceneId: "Scene56" }
+          ],
+        },
+
+        // シーン58 左右出口
+        {
+          id: "Scene58",
+          background: "./images/Scene58.png",
+          text: "道が二手に分かれている…。\nどちらに進もうか…。",
+          choices: [
+            { 
+              text: "左へ進む",
+              randomBranching: {
+                sceneIds: ["Scene57_Already_SavedPrincess", "Scene29", "Scene40", "Scene53", "Scene38"]
+              }
+            },
+            { text: "右へ進む", nextSceneId: "Scene59" },
+            { text: "来た道を戻る", nextSceneId: "Scene57_Already_SavedPrincess" }
+          ],
+        },
+
+        // シーン59 奥に進む通路
+        {
+          id: "Scene59",
+          background: "./images/Scene59.png",
+          character: null,
+          text: "前方に奥へ進む通路がある。",
+          choices: [
+            { text: "前へ進む", nextSceneId: "Scene60" },
+            { text: "来た道を戻る", nextSceneId: "Scene58" }
+          ],
+        },
+
+        // シーン60 出口
+        {
+          id: "Scene60",
+          background: "./images/Scene60.png",
+          character: {
+            name: "姫様",
+            image: "./images/chara_princess.png",
+            position: "left"
+          },
+          text: "出口を発見。"
+        },
+        {
+          id: "Scene60_talk",
+          background: "./images/Scene60.png",
+          text: "姫の言う通り、前方から明るい光が差し込んでいる。\nやっとここから抜け出せる…！！",
+          choices: [
+            { text: "前へ進む", nextSceneId: "Scene61" },
+            { text: "来た道を戻る", nextSceneId: "Scene59" }
+          ],
+        },
+
+        // シーン61 エンディング
+        {
+          id: "Scene61",
+          background: "./images/Scene61.png",
+          text: "あれから私達は洞窟を脱出し、姫の帰りを待つ王様のいる城へと戻ってきた。"
+        },
+        {
+          id: "Scene61_talk1",
+          background: "./images/Scene61.png",
+          character: {
+            name: "王様",
+            image: "./images/chara_king.png",
+            position: "left"
+          },
+          text: "……よくぞ、無事で。",
+          choices: null,
+        },
+        {
+          id: "Scene61_talk2",
+          background: "./images/Scene61.png",
+          character: {
+            name: "姫様",
+            image: "./images/chara_princess.png",
+            position: "right"
+          },
+          text: "お父様……！\nはい、私はもう大丈夫です。\nこの方が、私を助け出してくれました。",
+          choices: null,
+        },
+        {
+          id: "Scene61_talk3",
+          background: "./images/Scene61.png",
+          character: {
+            name: "姫様",
+            image: "./images/chara_princess.png",
+            position: "right"
+          },
+          text: "本当に、ありがとうございました。\nあなたが来てくれなければ、私はずっとあの暗い洞窟の中でした。\nあなたの勇気に、心から感謝します。",
+          choices: null,
+        },
+        {
+          id: "Scene61_talk4",
+          background: "./images/Scene61.png",
+          character: {
+            name: "王様",
+            image: "./images/chara_king.png",
+            position: "left"
+          },
+          text: "貴殿の功績、この国は決して忘れぬ。\nどのような褒美も望み通りにしよう。\n……いや、それ以上に、一人の父として、礼を言わせてくれ。",
+          choices: null,
+        },
+        {
+          id: "Scene61_talk5",
+          background: "./images/Scene61.png",
+          character: {
+            name: "王様",
+            image: "./images/chara_king.png",
+            position: "left"
+          },
+          text: "本当に、ありがとう。\n娘を救ってくれて……。",
+          choices: null,
+        },
+        {
+          id: "Scene61_talk6",
+          background: "./images/Scene61.png",
+          character: {
+            name: "姫様",
+            image: "./images/chara_princess.png",
+            position: "right"
+          },
+          text: "さあ、お父様。\n皆にも無事を知らせましょう。\nあなたも一緒に。",
+          choices: null,
+        },
+        {
+          id: "Scene61_talk7",
+          background: "./images/Scene61.png",
+          character: null,
+          text: "魔王は倒され、無事に姫は救出されたのでした。",
+          choices: [
+            { text: "ゲームを最初から再開する", nextSceneId: "Scene1" }
+          ],
+        },
+
+        {
+          id: "GameOver",
+          background: "./images/GameOver.png",
+          text: "",
+          character: null,
+          hpChange: -100
+        },
+
+
+        //*************************************************************************
+        // 選択肢シーン
+
+        {
+          id: "first_choice",
+          background: "https://images.unsplash.com/photo-1506744038136-46273834b3fb",
+          text: "さて、どうしますか？",
+          character: null,
+          bgm: "decision.mp3",
+          choices: [
+            { text: "森に行く", nextSceneId: "enter_forest" },
+            { text: "町に戻る", nextSceneId: "town" },
+            { text: "ゲームを終わる", nextSceneId: "ending" }
+          ],
+        },
+        {
+          id: "enter_forest",
+          background: "https://images.unsplash.com/photo-1441974231531-c6227db76b6e",
+          text: "深い森に足を踏み入れました。冒険が始まります。",
+          character: null,
+          choices: null,
+          bgm: "forest.mp3",
+          branching: {
+            itemRequired: "magic_sword",
+            trueSceneId: "forest_with_sword",
+            falseSceneId: "forest_without_sword",
+          },
+        },
+      ];
+
+      // 攻撃処理
+      const performAttack = (weapon, enemy) => {
+        let attackPower = 5;
+        let accuracy = 50;
+        let criticalRate = 2;
+        let weaponName = "素手";
+        
+        if (weapon && weapon.weaponStats) {
+          attackPower = weapon.weaponStats.attackPower;
+          accuracy = weapon.weaponStats.accuracy;
+          criticalRate = weapon.weaponStats.criticalRate;
+          weaponName = weapon.name;
+        }
+        
+        const attackRoll = Math.random() * 100;
+        const criticalRoll = Math.random() * 100;
+        
+        let result = {
+          type: 'miss',
+          damage: 0,
+          message: ''
+        };
+        
+        if (attackRoll <= accuracy) {
+          if (criticalRoll <= criticalRate) {
+            result.type = 'critical';
+            result.damage = attackPower * 2;
+            result.message = `クリティカルヒット！ ${weaponName}で${result.damage}のダメージ！`;
+          } else {
+            result.type = 'hit';
+            result.damage = attackPower;
+            result.message = `${weaponName}が命中！ ${result.damage}のダメージ！`;
+          }
+        } else {
+          result.type = 'miss';
+          result.message = `${weaponName}は外れた！`;
+        }
+        
+        return result;
+      };
+
+      // 敵の攻撃
+      const enemyTurn = (enemy) => {
+        const damage = Math.floor(Math.random() * 6) + enemy.attackPower - 3;
+        const finalDamage = Math.max(1, damage);
+        return {
+          damage: finalDamage,
+          message: `${enemy.name}の攻撃！ ${finalDamage}のダメージを受けた！`
+        };
+      };
+
+      // 武器選択時の処理
+      const handleWeaponSelect = (weapon) => {
+        const attackResult = performAttack(weapon, currentBattle.enemy);
+        const newEnemyHP = Math.max(0, currentBattle.enemy.currentHP - attackResult.damage);
+        
+        const newLog = [...battleLog, attackResult];
+        
+        if (newEnemyHP <= 0) {
+          newLog.push({ message: `${currentBattle.enemy.name}を倒した！`, type: 'victory' });
+          setBattleLog(newLog);
+          setShowWeaponSelect(false);
+          
+          setTimeout(() => {
+            const victoryIndex = getSceneIndexById(currentScene.onVictory);
+            setCurrentSceneIndex(victoryIndex);
+            setTextProgress(0);
+            setCurrentBattle(null);
+            setBattleLog([]);
+          }, 2000);
+          return;
+        }
+        
+        const enemyAttack = enemyTurn(currentBattle.enemy);
+        const newPlayerHP = hp - enemyAttack.damage;
+        newLog.push(enemyAttack);
+        
+        setHP(newPlayerHP);
+        setBattleLog(newLog);
+        setCurrentBattle({
+          ...currentBattle,
+          enemy: { ...currentBattle.enemy, currentHP: newEnemyHP },
+          turnCount: currentBattle.turnCount + 1
+        });
+        
+        if (newPlayerHP <= 0) {
+          setShowWeaponSelect(false);
+          setTimeout(() => {
+            const defeatIndex = getSceneIndexById(currentScene.onDefeat);
+            setCurrentSceneIndex(defeatIndex);
+            setTextProgress(0);
+            setCurrentBattle(null);
+            setBattleLog([]);
+            processSceneEffects(defeatIndex);
+          }, 2000);
+        } else {
+          setShowWeaponSelect(false);
+          setTimeout(() => setShowWeaponSelect(true), 1500);
+        }
+      };
+
+      const getSceneIndexById = (sceneId) => {
+        if (!sceneId) return null;
+        return scenario.findIndex(scene => scene.id === sceneId);
+      };
+
+      const getNextSceneIndex = (nextSceneId) => {
+        if (!nextSceneId) return null;
+        const index = getSceneIndexById(nextSceneId);
+        return index !== -1 ? index : null;
+      };
+
+      const currentScene = scenario[currentSceneIndex];
+      
+      const getCurrentBackgroundSize = () => {
+        return backgroundSizes[currentSceneIndex] || defaultBackgroundSize;
+      };
+
+      const updateBackgroundSize = (sceneIndex, size) => {
+        setBackgroundSizes(prev => ({
+          ...prev,
+          [sceneIndex]: size
+        }));
+      };
+
+      const processSceneEffects = (newSceneIndex) => {
+        const scene = scenario[newSceneIndex];
+        
+        if (scene && scene.hpChange) {
+          setHP(prevHP => {
+            let newHP = prevHP + scene.hpChange;
+            if (newHP > maxHP) newHP = maxHP;
+            if (newHP < 0) newHP = 0;
+            return newHP;
+          });
+        }
+        
+        if (scene && scene.collectItem) {
+          const newItem = scene.collectItem;
+          if (!inventory.some(item => item.id.toLowerCase() === newItem.id.toLowerCase())) {
+            setInventory(prevInventory => [...prevInventory, newItem]);
+          }
+        }
+        
+        if (scene && scene.useItem) {
+          const { id: itemId, consumeOnUse } = scene.useItem;
+          if (consumeOnUse) {
+            setInventory(prevInventory => 
+              prevInventory.filter(item => item.id.toLowerCase() !== itemId.toLowerCase())
+            );
+          }
+        }
+        
+        if (scene && scene.bgm) {
+          setCurrentBGM(scene.bgm);
+        }
+      };
+
+      useEffect(() => {
+        if (currentScene && !showChoices && !currentBattle && textProgress < currentScene.text.length) {
+          setIsAnimating(true);
+          const timer = setTimeout(() => {
+            setTextProgress(textProgress + 1);
+          }, textSpeed);
+          return () => clearTimeout(timer);
+        } else {
+          setIsAnimating(false);
+        }
+      }, [textProgress, currentScene, showChoices, textSpeed, currentBattle]);
+
+      useEffect(() => {
+        if (autoPlayActive && !isAnimating && !showChoices && currentScene && !isGameOver && !currentBattle) {
+          const timer = setTimeout(() => {
+            handleNext();
+          }, autoPlaySpeed);
+          return () => clearTimeout(timer);
+        }
+      }, [autoPlayActive, isAnimating, showChoices, currentScene, isGameOver, currentBattle]);
+
+      const handleNext = () => {
+        if (showChoices || isGameOver || currentBattle) return;
+
+        if (textProgress < currentScene.text.length) {
+          setTextProgress(currentScene.text.length);
+        } else {
+          // 戦闘モードの開始
+          if (currentScene.battleMode && !currentBattle) {
+            setCurrentBattle({
+              enemy: {...currentScene.enemy},
+              turnCount: 0
+            });
+            setBattleLog([{ message: `${currentScene.enemy.name}が現れた！`, type: 'info' }]);
+            setShowWeaponSelect(true);
+            return;
+          }
+          
+          if (currentScene.choices) {
+            setShowChoices(true);
+            processSceneEffects(currentSceneIndex);
+          } else {
+            setHistoryLog([...historyLog, {
+              character: currentScene.character?.name || "ナレーション",
+              text: currentScene.text
+            }]);
+
+            // ★ランダム分岐処理（追加）
+            if (currentScene.randomBranching) {
+              const { sceneIds } = currentScene.randomBranching;
+              const randomSceneId = sceneIds[Math.floor(Math.random() * sceneIds.length)];
+              const nextIndex = getSceneIndexById(randomSceneId);
+              
+              if (nextIndex !== null && nextIndex !== -1) {
+                setCurrentSceneIndex(nextIndex);
+                setTextProgress(0);
+                processSceneEffects(nextIndex);
+              }
+              return;
+            }
+            
+            if (currentScene.branching) {
+              const { itemRequired, trueSceneId, falseSceneId } = currentScene.branching;
+              const hasItem = inventory.some(item => item.id.toLowerCase() === itemRequired.toLowerCase());
+              const nextIndex = getSceneIndexById(hasItem ? trueSceneId : falseSceneId);
+              if (nextIndex !== null && nextIndex !== -1) {
+                setCurrentSceneIndex(nextIndex);
+                setTextProgress(0);
+                processSceneEffects(nextIndex);
+              }
+              return;
+            }
+            
+            if (currentScene.nextSceneId) {
+              const nextIndex = getSceneIndexById(currentScene.nextSceneId);
+              if (nextIndex !== null && nextIndex !== -1) {
+                setCurrentSceneIndex(nextIndex);
+                setTextProgress(0);
+                processSceneEffects(nextIndex);
+              }
+              return;
+            }
+            
+           if (currentSceneIndex < scenario.length - 1) {
+             const nextIndex = currentSceneIndex + 1;
+             setCurrentSceneIndex(nextIndex);
+             setTextProgress(0);
+             processSceneEffects(nextIndex);
+           }
+          }
+        }
+      };
+
+      const handleChoice = (choice) => {
+
+      // ★ここで「最初から再開」の判定をする
+          if (choice.text === "ゲームを最初から再開する") {
+              resetGame();
+                  return;  // これ以降の処理をスキップ
+          }
+
+        setHistoryLog([...historyLog, {
+          character: currentScene.character?.name || "ナレーション",
+          text: currentScene.text
+        }]);
+        
+        let nextSceneId;
+        
+        // ★ランダム分岐処理（追加）
+        if (choice.randomBranching) {
+          const { sceneIds } = choice.randomBranching;
+          nextSceneId = sceneIds[Math.floor(Math.random() * sceneIds.length)];
+        }
+        else if (choice.multiConditionalBranching) {
+          nextSceneId = choice.defaultSceneId;
+          for (const condition of choice.multiConditionalBranching) {
+            const hasItem = inventory.some(item => 
+              item.id.toLowerCase() === condition.itemRequired.toLowerCase()
+            );
+            if (hasItem) {
+              nextSceneId = condition.nextSceneId;
+              break;
+            }
+          }
+        }
+        else if (choice.conditionalBranching) {
+          const { itemRequired, trueSceneId, falseSceneId } = choice.conditionalBranching;
+          const hasItem = inventory.some(item => item.id.toLowerCase() === itemRequired.toLowerCase());
+          nextSceneId = hasItem ? trueSceneId : falseSceneId;
+        } else {
+          nextSceneId = choice.nextSceneId;
+        }
+        
+        const nextIndex = getSceneIndexById(nextSceneId);
+        if (nextIndex !== null && nextIndex !== -1) {
+          setCurrentSceneIndex(nextIndex);
+          setTextProgress(0);
+          setShowChoices(false);
+          processSceneEffects(nextIndex);
+        }
+      };
+      
+      const handleRestart = () => {
+        setCurrentSceneIndex(0);
+        setTextProgress(0);
+        setHP(maxHP);
+        setIsGameOver(false);
+        setInventory([]);
+        setHistoryLog([]);
+        setShowChoices(false);
+        setAutoPlayActive(false);
+        setCurrentBattle(null);
+        setBattleLog([]);
+        setShowWeaponSelect(false);
+        
+        if (scenario[0].bgm) {
+          setCurrentBGM(scenario[0].bgm);
+        }
+      };
+
+      const toggleAutoPlay = () => {
+        setAutoPlayActive(!autoPlayActive);
+      };
+
+      const toggleHistory = () => {
+        setShowHistory(!showHistory);
+        setShowConfig(false);
+      };
+
+      const toggleConfig = () => {
+        setShowConfig(!showConfig);
+        setShowHistory(false);
+      };
+
+      return e('div', 
+        { className: "flex flex-col items-center justify-center w-full h-screen bg-gray-900 text-white" },
+        [
+          e('div', 
+            { key: 'main-container', className: "relative w-full max-w-4xl h-3/4 bg-black rounded-lg overflow-hidden shadow-lg" },
+            [
+              currentScene && e(Scene, { key: 'scene', background: currentScene.background, backgroundSize: getCurrentBackgroundSize() }),
+              
+              currentScene?.character && e(Character, { 
+                key: 'character',
+                image: currentScene.character.image,
+                position: currentScene.character.position 
+              }),
+              
+              e(HPBar, { key: 'hpbar', currentHP: hp, maxHP: maxHP }),
+              
+              e(ItemDisplay, { key: 'items', items: inventory }),
+              
+              isGameOver && e(GameOver, { key: 'gameover', onRestart: handleRestart }),
+              
+              currentBattle && e(BattleLog, { key: 'battlelog', log: battleLog }),
+              
+              showWeaponSelect && e(WeaponSelector, { 
+                key: 'weaponselect',
+                inventory: inventory, 
+                onSelectWeapon: handleWeaponSelect 
+              }),
+              
+              !isGameOver && !showWeaponSelect && e('div', 
+                { 
+                  key: 'textbox',
+                  className: "absolute bottom-0 w-full min-h-16 bg-gray-800 bg-opacity-90 p-4 rounded-t-lg",
+                  onClick: handleNext
+                },
+                [
+                  currentScene?.character?.name && e('div', 
+                    { key: 'character-name', className: "text-yellow-300 font-bold mb-1" },
+                    currentScene.character.name
+                  ),
+                  
+                  e('div', 
+                    { key: 'text-content', className: "text-lg" }, 
+                    currentScene?.text.substring(0, textProgress).split('\n').map((line, index, array) => 
+                      e(React.Fragment, { key: index }, [
+                        line,
+                        index < array.length - 1 && e('br', { key: `br-${index}` })
+                      ])
+                    )
+                  ),
+                  
+                  !showChoices && !currentBattle && e('div', 
+                    { key: 'click-indicator', className: "absolute bottom-2 right-4 text-sm text-gray-400" },
+                    isAnimating ? "テキスト表示中..." : "クリックして次へ"
+                  )
+                ]
+              ),
+              
+              showChoices && currentScene?.choices && e('div', 
+                { key: 'choices', className: "absolute bottom-32 left-1/2 transform -translate-x-1/2 w-3/4" },
+                currentScene.choices.map((choice, index) => 
+                  e('button', 
+                    { 
+                      key: index, 
+                      className: "w-full mb-3 py-3 px-4 bg-blue-700 hover:bg-blue-600 text-white rounded-lg text-lg shadow-lg",
+                      onClick: () => handleChoice(choice)
+                    },
+                    choice.text
+                  )
+                )
+              ),
+              
+              !isGameOver && !showWeaponSelect && e('div', 
+                { key: 'controls', className: "absolute top-20 left-2 flex space-x-2" },
+                [
+                  e('button', 
+                    { 
+                      key: 'history-btn',
+                      className: "px-3 py-1 bg-gray-700 hover:bg-gray-600 rounded-md text-sm",
+                      onClick: toggleHistory
+                    },
+                    "履歴"
+                  ),
+                  
+                  e('button', 
+                    { 
+                      key: 'config-btn',
+                      className: "px-3 py-1 bg-gray-700 hover:bg-gray-600 rounded-md text-sm",
+                      onClick: toggleConfig
+                    },
+                    "設定"
+                  ),
+                  
+                  e('button', 
+                    { 
+                      key: 'autoplay-btn',
+                      className: `px-3 py-1 ${autoPlayActive ? "bg-blue-600 hover:bg-blue-500" : "bg-gray-700 hover:bg-gray-600"} rounded-md text-sm`,
+                      onClick: toggleAutoPlay
+                    },
+                    autoPlayActive ? "自動再生 ON" : "自動再生"
+                  )
+                ]
+              ),
+              
+              showHistory && e('div', 
+                { 
+                  key: 'history-panel',
+                  className: "absolute top-0 left-0 w-full h-full bg-black bg-opacity-90 p-6 overflow-y-auto",
+                  onClick: toggleHistory
+                },
+                [
+                  e('h3', { key: 'history-title', className: "text-xl mb-4" }, "メッセージ履歴"),
+                  e('div', { key: 'history-list', className: "space-y-4" }, 
+                    historyLog.map((entry, index) => 
+                      e('div', { key: index, className: "border-b border-gray-700 pb-2" }, [
+                        e('div', { key: `char-${index}`, className: "text-yellow-300" }, entry.character),
+                        e('div', { key: `text-${index}`, className: "pl-4" }, entry.text)
+                      ])
+                    )
+                  ),
+                  e('p', { key: 'history-close', className: "mt-4 text-sm text-gray-400" }, "クリックして閉じる")
+                ]
+              ),
+              
+              showConfig && e('div', 
+                { 
+                  key: 'config-panel',
+                  className: "absolute top-0 left-0 w-full h-full bg-black bg-opacity-90 p-6",
+                  onClick: (e) => e.stopPropagation() 
+                },
+                [
+                  e('h3', { key: 'config-title', className: "text-xl mb-4" }, "設定"),
+                  
+                  e('div', { key: 'config-content', className: "space-y-6" }, [
+                    e('div', { key: 'text-speed', className: "space-y-2" }, [
+                      e('label', { key: 'text-speed-label', className: "block" }, "テキスト表示速度"),
+                      e('input', {
+                        key: 'text-speed-input',
+                        type: "range",
+                        min: "10",
+                        max: "100",
+                        value: textSpeed,
+                        className: "w-full",
+                        onChange: (e) => setTextSpeed(Number(e.target.value))
+                      }),
+                      e('div', { key: 'text-speed-labels', className: "flex justify-between text-sm" }, [
+                        e('span', { key: 'fast' }, "速い"),
+                        e('span', { key: 'slow' }, "遅い")
+                      ])
+                    ]),
+                    
+                    e('div', { key: 'autoplay-speed', className: "space-y-2" }, [
+                      e('label', { key: 'autoplay-speed-label', className: "block" }, "自動再生速度"),
+                      e('input', {
+                        key: 'autoplay-speed-input',
+                        type: "range",
+                        min: "1000",
+                        max: "5000",
+                        value: autoPlaySpeed,
+                        className: "w-full",
+                        onChange: (e) => setAutoPlaySpeed(parseInt(e.target.value))
+                      }),
+                      e('div', { key: 'autoplay-speed-labels', className: "flex justify-between text-sm" }, [
+                        e('span', { key: 'fast2' }, "速い"),
+                        e('span', { key: 'slow2' }, "遅い")
+                      ])
+                    ]),
+                    
+                    e('div', { key: 'bg-size', className: "space-y-2" }, [
+                      e('label', { key: 'bg-size-label', className: "block" }, "背景表示設定"),
+                      e('select', {
+                        key: 'bg-size-select',
+                        value: getCurrentBackgroundSize(),
+                        className: "w-full bg-gray-700 p-2 rounded-md",
+                        onChange: (e) => updateBackgroundSize(currentSceneIndex, e.target.value)
+                      }, [
+                        e('option', { key: 'cover', value: "cover" }, "全体表示 (cover)"),
+                        e('option', { key: 'contain', value: "contain" }, "縮小表示 (contain)"),
+                        e('option', { key: 'stretch', value: "100% 100%" }, "拡大/縮小表示 (stretch)")
+                      ])
+                    ]),
+                    
+                    e('button', { 
+                      key: 'close-config',
+                      className: "w-full py-2 bg-blue-600 hover:bg-blue-500 rounded-md mt-4",
+                      onClick: toggleConfig
+                    }, "閉じる")
+                  ])
+                ]
+              )
+            ]
+          ),
+          
+          e('div', { key: 'instructions', className: "text-center mt-4 text-sm text-gray-400" }, [
+            "クリックでテキストを進める。選択肢を選ぶとストーリーが分岐します。",
+            e('br', { key: 'br-instr' }),
+            "アイテムの収集とHPシステムで冒険を進めましょう。戦闘では武器を選択して敵と戦います。"
+          ])
+        ]
+      );
+    };
+
+    const root = ReactDOM.createRoot(document.getElementById('root'));
+    root.render(e(VisualNovelEngine));
+  </script>
+</body>
+</html>
