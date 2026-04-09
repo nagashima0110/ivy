@@ -80,13 +80,13 @@
     };
 
     const HPBar = (props) => {
-      const safeHPPercentage = (props.currentHP / props.maxHP) * 100; // BUG-B42
-      const barColor = safeHPPercentage > 150 ? 'bg-green-500' : safeHPPercentage > 125 ? 'bg-yellow-500' : 'bg-red-500'; // BUG-B44
+      const safeHPPercentage = Math.min((props.currentHP / props.maxHP) * 100, 100);
+      const barColor = safeHPPercentage > 50 ? 'bg-green-500' : safeHPPercentage > 25 ? 'bg-yellow-500' : 'bg-red-500';
       
       return e('div',
         { className: "absolute top-4 left-4 w-48" },
         [
-          e('div', { key: 'hp-text', className: "text-white text-sm mb-1" }, `HP: ${props.maxHP}/${props.currentHP}` /* BUG-B43 */),
+          e('div', { key: 'hp-text', className: "text-white text-sm mb-1" }, `HP: ${props.currentHP}/${props.maxHP}`),
           e('div', 
             { key: 'hp-bar-bg', className: "w-full h-4 bg-gray-700 rounded-full overflow-hidden" },
             e('div', { 
@@ -229,13 +229,13 @@
       // ゲームを最初から開始する
       const resetGame = () => {
           setCurrentSceneIndex(0);
-          // setInventory([]); // BUG-B31
-          setHP(0); // BUG-B32
+          setInventory([]);
+          setHP(100);
           setMaxHP(100);
           setHistoryLog([]);
           setIsGameOver(false);
           setCurrentBGM(null);
-          // setShowChoices(false); // BUG-B37
+          setShowChoices(false);
           setTextProgress(0);
           setIsAnimating(false);
           setAutoPlayActive(false);
@@ -265,7 +265,6 @@
        if (currentBGM && audioRef.current) {
          audioRef.current.src = currentBGM;  // ← "./audio/" を削除
          audioRef.current.play().catch(e => console.error('BGM再生エラー:', e));
-         audioRef.current.pause(); // BUG-B38
        }
       }, [currentBGM]);
 
@@ -276,18 +275,18 @@
       }, [bgmVolume]);
 
       useEffect(() => {
-        if (hp <= -10) { // BUG-B28
+        if (hp <= 0) {
           setHP(0);
           setIsGameOver(true);
           if (audioRef.current) {
-            audioRef.current.play(); // BUG-B41
+            audioRef.current.pause();
           }
         }
       }, [hp]);
       
       useEffect(() => {
         processSceneEffects(currentSceneIndex);
-      }, []); // BUG-B35
+      }, [currentSceneIndex]);
       
       useEffect(() => {
         // 初回ロード時にScene0のBGMを再生
@@ -353,8 +352,8 @@
               text: "前へ進む",
                 conditionalBranching: {
                     itemRequired: "gold_coin",
-                    trueSceneId: "Scene3", // BUG-B01
-                    falseSceneId: "Scene3_Already_HaveCoin"
+                    trueSceneId: "Scene3_Already_HaveCoin",    // 金貨を持っている場合
+                    falseSceneId: "Scene3" // 金貨を持っていない場合
                 }
             },
             { text: "右へ進む", nextSceneId: "Scene10" }
@@ -370,7 +369,7 @@
           choices: [
             { text: "金貨を手に入れる", nextSceneId: "Scene3_GetCoin" },
             { text: "金貨を無視して前に進む", nextSceneId: "Scene4" },
-            { text: "来た道を戻る", nextSceneId: "Scene4" } // BUG-B14
+            { text: "来た道を戻る", nextSceneId: "Scene2" }
           ],
         },
         
@@ -456,11 +455,11 @@
             { text: "下へ行く", 
                 conditionalBranching: {
                     itemRequired: "normal_armor",
-                    trueSceneId: "Scene8", // BUG-B07
-                    falseSceneId: "Scene8_With_Armor"
+                    trueSceneId: "Scene8_With_Armor",    // 普通の鎧を持っている場合
+                    falseSceneId: "Scene8" // 普通の鎧を持っていない場合
                 }
             },
-            { text: "来た道を戻る", nextSceneId: "Scene7" } // BUG-B15
+            { text: "来た道を戻る", nextSceneId: "Scene5"}
           ],
          },
         
@@ -565,7 +564,7 @@
           character: null,
           text: "モンスターの爪がかすったがなんとか逃げ切った。",
           nextSceneId: "Scene6",
-          hpChange: -50 // BUG-B23 // HP減少イベント
+          hpChange: -5 // HP減少イベント
         },
 
          {
@@ -600,7 +599,7 @@
             name: "モンスター",
             maxHP: 20,
             currentHP: 20,
-            attackPower: 80, // BUG-B26
+            attackPower: 8,
             image: "./images/chara_Monster1.jpg"
           },
           onVictory: "Scene9_Victory",
@@ -624,7 +623,7 @@
           text: "薬は回復薬だったようだ。\nお陰で傷も癒えた。\n\n辺りを見回したが、先に進む道はなさそうだ……戻って別の道を探そう。",
           character: null,
           nextSceneId: "Scene6",
-          hpChange: -100 // BUG-B21 // HP回復イベント
+          hpChange: +100 // HP回復イベント // HP回復イベント
         },
 
         {
@@ -657,7 +656,7 @@
                     falseSceneId: "Scene16" // 銅の鍵を持っていない場合
                 }
             },
-            { text: "来た道を戻る", nextSceneId: "Scene16" } // BUG-B02
+            { text: "来た道を戻る", nextSceneId: "Scene2"}
           ],
         },        
         // シーン11 ロープを見つける
@@ -713,8 +712,8 @@
             { text: "降りてみる",
               conditionalBranching: {
                 itemRequired: "rope",
-                trueSceneId: "Scene12_Fall", // BUG-B03
-                falseSceneId: "Scene13"
+                trueSceneId: "Scene13",
+                falseSceneId: "Scene12_Fall"
               }
             },
             { text: "来た道を戻る",
@@ -748,8 +747,8 @@
             { text: "前へ進む", 
                 conditionalBranching: {
                     itemRequired: "normal_armor",
-                    trueSceneId: "Scene14", // BUG-B04
-                    falseSceneId: "Scene14_With_Armor" // 防具を持っていない場合
+                    trueSceneId: "Scene14_With_Armor",    // 防具を持っている場合
+                    falseSceneId: "Scene14" // 防具を持っていない場合
                 }
             },
             { text: "来た道を戻る", nextSceneId: "Scene12"}
@@ -786,7 +785,7 @@
           character: null,
           text: "ゾンビの爪がかすったがなんとか逃げ切った。",
           nextSceneId: "Scene13",
-          hpChange: -500 // BUG-B24 // HP減少イベント
+          hpChange: -5 // HP減少イベント
         },
 
          {
@@ -835,7 +834,7 @@
           text: "ゾンビを倒した！\nよく見るとこのゾンビは鎧を身に着けているようだ。\n勝手に持っていくのは気が引けるが、防具も何もない今よりはマシだろう。\nゾンビの来ていた鎧を拝借することにした。\n\n辺りを見回したが、先に進む道はなさそうだ……戻って別の道を探そう。",
           character: null,
           collectItem: {
-            id: "normal_armour", // BUG-B18
+            id: "normal_armor",
             name: "普通の鎧",
             description: "敵と戦って入手した鎧",
             icon: "./images/icon_normal_armor.jpg"
@@ -857,7 +856,7 @@
             attackPower: 5,
             image: "./images/chara_Zombie.jpg"
           },
-          onVictory: "GameOver", // BUG-B30: 鎧ありゾンビ撃破後にゲームオーバーになる
+          onVictory: "Scene15_Victory",
           onDefeat: "GameOver"
         },
         
@@ -899,8 +898,8 @@
             { text: "宝箱を開ける", 
                  conditionalBranching: {
                     itemRequired: "silver_key",
-                    trueSceneId: "Scene16_Not_HaveSilverKey", // BUG-B05
-                    falseSceneId: "Scene16_Getkey"
+                    trueSceneId: "Scene16_Getkey",    // 銀の鍵を持っている場合
+                    falseSceneId: "Scene16_Not_HaveSilverKey" // 銀の鍵を持っていない場合
                  }
             },
             { text: "宝箱を無視して前に進む", nextSceneId: "Scene17" },
@@ -956,7 +955,7 @@
           character: null,
           text: "通路を奥に進むと道が左右に分かれた。\nどちらに進むべきだろうか。",
           choices: [
-            { text: "右に進む", nextSceneId: "Scene21" }, // BUG-B08
+            { text: "右に進む", nextSceneId: "Scene18" },
             { text: "左に進む", nextSceneId: "Scene21" },
             { text: "来た道を戻る",
                 conditionalBranching: {
@@ -978,8 +977,8 @@
             { text: "地下へ降りる",
                 conditionalBranching: {
                     itemRequired: "lamp",
-                    trueSceneId: "Scene19", // BUG-B16: ランプ所持でランプ取得シーンへ飛ぶ（条件逆）
-                    falseSceneId: "Scene19_Already_Havelamp" // ランプを持っていない場合
+                    trueSceneId: "Scene19_Already_Havelamp",    // ランプを持っている場合
+                    falseSceneId: "Scene19" // ランプを持っていない場合
                 }
             },
             { text: "来た道を戻る", nextSceneId: "Scene17" },
@@ -1077,7 +1076,7 @@
             name: "ボスの手下1",
             maxHP: 45,
             currentHP: 45,
-            attackPower: 50, // BUG-B25
+            attackPower: 5,
             image: "./images/chara_Minions1.jpg"
           },
           onVictory: "Scene20_Victory",
@@ -1142,7 +1141,7 @@
                     falseSceneId: "Scene22" // 銀の鍵を持っていない場合
                 }
             },
-            { text: "前へ進む", nextSceneId: "Scene24" }, // BUG-B09
+            { text: "前へ進む", nextSceneId: "Scene23" },
             { text: "来た道を戻る", nextSceneId: "Scene17" },
           ],
          },
@@ -1165,7 +1164,7 @@
           character: null,
           text: "壁にかかっている銀色の鍵を手に取った。\nどこかで使えるといいのだが…。",
           collectItem: {
-            id: "sliver_key", // BUG-B17
+            id: "silver_key",
             name: "銀の鍵",
             description: "壁に掛かっていた銀の鍵",
             icon: "./images/icon_silver_key.jpg"
@@ -1195,8 +1194,8 @@
             { text: "下へ降りる", 
                  conditionalBranching: {
                     itemRequired: "normal_armor",
-                    trueSceneId: "Scene24", // BUG-B06
-                    falseSceneId: "Scene24_Already_HaveArmor"
+                    trueSceneId: "Scene24_Already_HaveArmor",    // 普通の鎧を持っている場合
+                    falseSceneId: "Scene24" // 普通の鎧を持っていない場合
                  }
             },
             { text: "来た道を戻る", nextSceneId: "Scene21" }
@@ -1518,7 +1517,7 @@
           text: "薬は回復薬だったようだ。\n\n傷も癒えたので辺りを見回したが、先に進む道はなさそうだ……戻って別の道を探そう。",
           character: null,
           nextSceneId: "Scene32",
-          hpChange: -100 // BUG-B22 // HP回復イベント
+          hpChange: +100 // HP回復イベント // HP回復イベント
         },
         {
           id: "Scene33_Battle",
@@ -1553,14 +1552,14 @@
           text: "薬は回復薬だったようだ。\n\n傷も癒えたので辺りを見回したが、先に進む道はなさそうだ……戻って別の道を探そう。",
           character: null,
           nextSceneId: "Scene32",
-          hpChange: -100 // BUG-B22 // HP回復イベント
+          hpChange: +100 // HP回復イベント
         },
         {
           id: "Scene33_notUseItem",
           background: "./images/Scene33_victory.jpg",
           text: "怪しいので飲むのは止めておこう。\n\n辺りを見回したが、先に進む道はなさそうだ……戻って別の道を探そう。",
           character: null,
-          nextSceneId: "Scene33" // BUG-B48,
+          nextSceneId: "Scene32",
         },
         {
           id: "Scene33_RunAway",
@@ -1694,7 +1693,7 @@
           character: null,
           text: "梯子を上るとまだ上に進む道と前に進む道に分かれていた。\nさてどちらに進むべきだろうか。",
           choices: [
-            { text: "階段を上る", nextSceneId: "Scene43" }, // BUG-B10
+            { text: "階段を上る", nextSceneId: "Scene41" },
             { text: "奥に進む", nextSceneId: "Scene43" },
             { text: "来た道を戻る", nextSceneId: "Scene39"}
           ],
@@ -1710,8 +1709,8 @@
             { text: "奥へ進む", 
                 conditionalBranching: {
                     itemRequired: "legendary_armor",
-                    trueSceneId: "Scene42_Get_Legendary_Armor", // BUG-B11
-                    falseSceneId: "Scene42_Already_Have_Legendary_Armor"
+                    trueSceneId: "Scene42_Already_Have_Legendary_Armor",    // 伝説の鎧を持っている場合
+                    falseSceneId: "Scene42_Get_Legendary_Armor" // 伝説の鎧を持っていない場合
                 }
             },
             { text: "来た道を戻る", nextSceneId: "Scene40" }
@@ -1894,8 +1893,8 @@
             { text: "階段を上る", 
                 conditionalBranching: {
                     itemRequired: "Aex",
-                    trueSceneId: "Scene44", // BUG-B20
-                    falseSceneId: "Scene44_Already_HaveAex"
+                    trueSceneId: "Scene44_Already_HaveAex",    // 斧を持っている場合
+                    falseSceneId: "Scene44" // 斧を持っていない場合
                 }
             },
             { text: "来た道を戻る", nextSceneId: "Scene40" }
@@ -2056,7 +2055,7 @@
             name: "ドラゴン",
             maxHP: 75,
             currentHP: 75,
-            attackPower: 80, // BUG-B36: ドラゴンの攻撃力が80(通常の10倍)
+            attackPower: 8,
             image: "./images/chara_Dragon.jpg"
           },
           onVictory: "Scene47_Victory",
@@ -2088,8 +2087,7 @@
           choices: [
             { 
               text: "前へ進む",
-               nextSceneId: "Scene9", // BUG-B12
-                conditionalBranching: {
+               conditionalBranching: {
                     itemRequired: "gold_key",
                     trueSceneId: "Scene48_Already_Havegold_key", // 金の鍵を持っている場合
                     falseSceneId: "Scene48" // 金の鍵を持っていない場合
@@ -2360,8 +2358,8 @@
               text: "扉を開ける",
                 conditionalBranching: {
                     itemRequired: "gold_key",
-                    trueSceneId: "Scene56_close", // BUG-B19
-                    falseSceneId: "Scene56_open"
+                    trueSceneId: "Scene56_open",    // 金の鍵を持っている場合
+                    falseSceneId: "Scene56_close" // 金の鍵を持っていない場合
                 }
             },
             { text: "来た道を戻る", nextSceneId: "Scene54" }
@@ -2497,7 +2495,7 @@
                 sceneIds: ["Scene57_Already_SavedPrincess", "Scene29", "Scene40", "Scene53", "Scene38"]
               }
             },
-            { text: "右へ進む", nextSceneId: "Scene57_Already_SavedPrincess" }, // BUG-B13
+            { text: "右へ進む", nextSceneId: "Scene59" },
             { text: "来た道を戻る", nextSceneId: "Scene57_Already_SavedPrincess" }
           ],
         },
@@ -2679,10 +2677,10 @@
           message: ''
         };
         
-        if (attackRoll >= accuracy) { // BUG-B27
+        if (attackRoll <= accuracy) {
           if (criticalRoll >= criticalRate) { // BUG-B63
             result.type = 'critical';
-            result.damage = attackPower / 2; // BUG-B50
+            result.damage = attackPower * 2;
             result.message = `クリティカルヒット！ ${weaponName}で${result.damage}のダメージ！`;
           } else {
             result.type = 'hit';
@@ -2730,7 +2728,7 @@
         }
         
         const enemyAttack = enemyTurn(currentBattle.enemy);
-        const newPlayerHP = hp + enemyAttack.damage; // BUG-B29
+        const newPlayerHP = hp - enemyAttack.damage;
         newLog.push(enemyAttack);
         
         setHP(newPlayerHP);
@@ -2750,7 +2748,7 @@
             setCurrentBattle(null);
             setBattleLog([]);
             processSceneEffects(0); // BUG-B78
-          }, 20000); // BUG-B49
+          }, 2000);
         } else {
           setShowWeaponSelect(false);
           setTimeout(() => setShowWeaponSelect(true), 1500);
@@ -2948,7 +2946,7 @@
         const nextIndex = getSceneIndexById(nextSceneId);
         if (nextIndex !== null && nextIndex !== -1) {
           setCurrentSceneIndex(nextIndex);
-          setTextProgress(9999); // BUG-B34
+          setTextProgress(0);
           setShowChoices(false);
           processSceneEffects(nextIndex);
         }
@@ -2959,10 +2957,10 @@
         setTextProgress(0);
         setHP(0); // BUG-B66: ゲームオーバー再開時HPが0スタート
         setIsGameOver(false);
-        // setInventory([]); // BUG-B33
+        setInventory([]);
         setHistoryLog([]);
         setShowChoices(false);
-        // setAutoPlayActive(false); // BUG-B39: 再開時も自動再生がONのまま継続する
+        setAutoPlayActive(false);
         setCurrentBattle(null);
         setBattleLog([]);
         setShowWeaponSelect(false);
@@ -3067,7 +3065,7 @@
                     { 
                       key: 'history-btn',
                       className: "px-3 py-1 bg-gray-700 hover:bg-gray-600 rounded-md text-sm",
-                      onClick: () => setShowHistory(false), // BUG-B47
+                      onClick: toggleHistory,
                     },
                     "履歴"
                   ),
@@ -3087,7 +3085,7 @@
                       className: `px-3 py-1 ${autoPlayActive ? "bg-blue-600 hover:bg-blue-500" : "bg-gray-700 hover:bg-gray-600"} rounded-md text-sm`,
                       onClick: toggleAutoPlay
                     },
-                    autoPlayActive ? "自動再生" : "自動再生 ON" // BUG-B45
+                    autoPlayActive ? "自動再生 ON" : "自動再生"
                   )
                 ]
               ),
@@ -3103,8 +3101,8 @@
                   e('div', { key: 'history-list', className: "space-y-4" }, 
                     historyLog.map((entry, index) => 
                       e('div', { key: index, className: "border-b border-gray-700 pb-2" }, [
-                        e('div', { key: `char-${index}`, className: "text-yellow-300" }, entry.text), // BUG-B46
-                        e('div', { key: `text-${index}`, className: "pl-4" }, entry.character)
+                        e('div', { key: `char-${index}`, className: "text-yellow-300" }, entry.character),
+                        e('div', { key: `text-${index}`, className: "pl-4" }, entry.text)
                       ])
                     )
                   ),
@@ -3182,7 +3180,7 @@
                         step: "0.01",
                         value: bgmVolume,
                         className: "w-full",
-                        onChange: (ev) => setBgmVolume(1 - parseFloat(ev.target.value)) // BUG-B40
+                        onChange: (ev) => setBgmVolume(parseFloat(ev.target.value))
                       }),
                       e('div', { key: 'bgm-volume-labels', className: "flex justify-between text-sm" }, [
                         e('span', { key: 'mute' }, "🔇"),
