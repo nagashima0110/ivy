@@ -41,7 +41,7 @@
     };
 
     const Character = (props) => {
-      const positionClass = props.position === 'left' ? 'right-10' : props.position === 'right' ? 'left-10' : 'left-1/2 transform -translate-x-1/2'; // BUG-B71
+      const positionClass = props.position === 'left' ? 'left-10' : props.position === 'right' ? 'right-10' : 'left-1/2 transform -translate-x-1/2';
       
       return e('div',
         { className: `absolute bottom-32 ${positionClass}` },
@@ -69,7 +69,7 @@
                 key: "img-${index}",
                 src: item.icon,
                 alt: item.name,
-                className: "h-2 w-2 object-contain" /*BUG-B73*/
+                className: "h-8 w-8 object-contain"
               }),
               e(
                 'span', { key: "name-${index}", className: "ml-2 text-sm text-white"},item.name)
@@ -109,7 +109,7 @@
               className: "px-6 py-3 bg-blue-600 hover:bg-blue-700 rounded-lg text-white font-bold",
               onClick: props.onRestart
             },
-            "" /* BUG-B69 */
+            "ゲームを再開する"
           ),
           e('p', { key: 'gameover-msg', className: "mt-4 text-white" }, "HPがゼロになりました")
         ]
@@ -136,7 +136,7 @@
             e('div', 
               { 
                 key: index, 
-                className: entry.type === 'critical' ? 'invisible' /* BUG-B70 */ : 
+                className: entry.type === 'critical' ? 'text-yellow-300 font-bold' : 
                            entry.type === 'miss' ? 'text-gray-400' : 
                            entry.type === 'victory' ? 'text-green-400 font-bold' :
                            'text-white'
@@ -222,7 +222,7 @@
       const [maxHP, setMaxHP] = useState(100);
       const [isGameOver, setIsGameOver] = useState(false);
       const [currentBGM, setCurrentBGM] = useState(null);
-      const [bgmVolume, setBgmVolume] = useState(0); // BUG-B85
+      const [bgmVolume, setBgmVolume] = useState(0.5);
       const audioRef = useRef(null);
       
 
@@ -296,7 +296,7 @@
       }, []);
             
       
-      const defaultBackgroundSize = "contain"; // BUG-B74
+      const defaultBackgroundSize = "cover";
 
       const scenario = [
         // シーン0 - タイトル（BGMなし）
@@ -448,7 +448,10 @@
                    itemRequired: "normal_sword",
                    nextSceneId: "Scene7_Already_HaveSword"
                  },
-              // BUG-B87: broken_sword条件削除
+                 {
+                   itemRequired: "broken_sword", 
+                   nextSceneId: "Scene7_Already_HaveSword"
+                 }
               ],
               defaultSceneId: "Scene7" // どのアイテムも持っていない場合
             },
@@ -573,7 +576,7 @@
           character: null,
           text: "モンスターの爪がかすったがなんとか逃げ切った。",
           nextSceneId: "Scene6",
-          hpChange: -25 // BUG-B55 // HP減少イベント
+          hpChange: -2.5 // HP減少イベント
         },
 
         {
@@ -613,7 +616,7 @@
           character: null,
           choices: [
             { text: "薬を飲む", nextSceneId: "Scene9_UseItem" },
-            { text: "薬を飲まない", nextSceneId: "Scene9" } // BUG-B59
+            { text: "薬を飲まない", nextSceneId: "Scene9_notUseItem" }
           ]
         },
         
@@ -623,7 +626,7 @@
           text: "薬は回復薬だったようだ。\nお陰で傷も癒えた。\n\n辺りを見回したが、先に進む道はなさそうだ……戻って別の道を探そう。",
           character: null,
           nextSceneId: "Scene6",
-          hpChange: +100 // HP回復イベント // HP回復イベント
+          hpChange: +100 // HP回復イベント
         },
 
         {
@@ -631,7 +634,7 @@
           background: "./images/Scene9_victory.jpg",
           text: "怪しいので飲むのは止めておこう。\n\n辺りを見回したが、先に進む道はなさそうだ……戻って別の道を探そう。",
           character: null,
-          nextSceneId: "Scene8", // BUG-B95: モンスター部屋に戻ってしまう,
+          nextSceneId: "Scene6",
         },
 
         
@@ -794,7 +797,7 @@
           character: null,
           text: "ゾンビの爪がかすったがなんとか逃げ切った。",
           nextSceneId: "Scene13",
-          hpChange: -25 // BUG-B56 // HP減少イベント
+          hpChange: -2.5 // HP減少イベント
         },
         
         {
@@ -877,7 +880,7 @@
           text: "薬は毒薬だったようだ…。\n\n辺りを見回したが、先に進む道はなさそうだ……戻って別の道を探そう。",
           character: null,
           nextSceneId: "Scene13",
-          hpChange: +5 // BUG-B51 // HP減少イベント
+          hpChange: -5 // HP減少イベント
         },
 
         {
@@ -921,7 +924,7 @@
         {
           id: "Scene16_Getkey",
           background: "./images/Scene16_Getkey.jpg",
-          text: "宝箱には鍵がかかっていなかったが、銅の鍵を見つけた。", // BUG-B89
+          text: "宝箱の中から銅の鍵を見つけた。\nこの鍵もどこかで使うことができるのだろうか。",
           character: null,
           collectItem: {
             id: "copper_key",
@@ -1120,8 +1123,8 @@
               text: "次へ", 
                 conditionalBranching: {
                     itemRequired: "lamp",
-                    trueSceneId: "Scene19", // BUG-B62: ランプ所持でランプ取得シーンへ飛ぶ（条件逆）
-                    falseSceneId: "Scene19_Already_Havelamp" //ランプを持っていない場合
+                    trueSceneId: "Scene19_Already_Havelamp", //ランプを持っている場合
+                    falseSceneId: "Scene19" //ランプを持っていない場合
                 }
              }
           ]
@@ -1403,7 +1406,7 @@
           text: "薬は毒薬だったようだ…。\n\n辺りを見回したが、先に進む道はなさそうだ……戻って別の道を探そう。",
           character: null,
           nextSceneId: "Scene26_Alreadyuse_lamp",
-          hpChange: -50 // BUG-B52 // HP減少イベント
+          hpChange: -5 // HP減少イベント
         },
 
         {
@@ -1493,43 +1496,8 @@
           enemy: {
             id: "wizard",
             name: "ウィザード",
-            maxHP: 250, // BUG-B64
-            currentHP: 250,
-            attackPower: 5,
-            image: "./images/chara_Wizard.jpg"
-          },
-          onVictory: "Scene33_Victory",
-          onDefeat: "GameOver"
-        },
-        {
-          id: "Scene33_Victory",
-          background: "./images/Scene33_victory.jpg",
-          text: "ウィザードを倒した！\n何かの薬を手に入れたが、回復薬だろうか…？",
-          character: null,
-          choices: [
-            { text: "薬を飲む", nextSceneId: "Scene33_UseItem" },
-            { text: "薬を飲まない", nextSceneId: "Scene33_notUseItem" }
-          ]
-        },
-        {
-          id: "Scene33_UseItem",
-          background: "./images/Scene33_victory.jpg",
-          text: "薬は回復薬だったようだ。\n\n傷も癒えたので辺りを見回したが、先に進む道はなさそうだ……戻って別の道を探そう。",
-          character: null,
-          nextSceneId: "Scene32",
-          hpChange: +100 // HP回復イベント // HP回復イベント
-        },
-        {
-          id: "Scene33_Battle",
-          background: "./images/Scene33.jpg",
-          character: null,
-          text: "ウィザードが襲いかかってきた！",
-          battleMode: true,
-          enemy: {
-            id: "wizard",
-            name: "ウィザード",
-            maxHP: 250, // BUG-B64
-            currentHP: 250,
+            maxHP: 25,
+            currentHP: 25,
             attackPower: 5,
             image: "./images/chara_Wizard.jpg"
           },
@@ -1567,7 +1535,7 @@
           text: "今魔物と戦っても勝てる見込みはなさそうだ。\n背を向けた途端に襲われそうなのでジリジリと間合いを広げながら逃げられる隙を伺った。\n\n今だ！ともと来た道を走り出した瞬間にシュッと何かが腕をかすめた。\n無我夢中で走るうちに、どうやら撒けたようでアイツは居ない。別の道を進んでみよう。",
           character: null,
           nextSceneId: "Scene32",
-          hpChange: 0 // BUG-B57 // HP減少イベント
+          hpChange: -2.5 // HP減少イベント
         },
 
         // シーン34 先に進む
@@ -1779,7 +1747,7 @@
 
        // シーン42 武器選択
         {
-          id: "Scene42_Choose_Wepon_wrong", // BUG-B90
+          id: "Scene42_Choose_Wepon",
           background: "./images/Scene42.jpg",
           character: null,
           text: "武器はどれにしようか…？",
@@ -1988,7 +1956,7 @@
             name: "オーク",
             maxHP: 50,
             currentHP: 50,
-            attackPower: 80, // BUG-B61: オークの攻撃力が80(通常の10倍)
+            attackPower: 8,
             image: "./images/chara_Monster2.jpg"
           },
           onVictory: "Scene46_Victory",
@@ -2000,7 +1968,7 @@
           text: "オークを倒した！\n何かの薬を手に入れたが、回復薬だろうか…？",
           character: null,
           choices: [
-            { text: "薬を飲む", nextSceneId: "Scene46" }, // BUG-B83
+            { text: "薬を飲む", nextSceneId: "Scene46_UseItem" },
             { text: "薬を飲まない", nextSceneId: "Scene46_notUseItem" }
           ]
         },
@@ -2010,7 +1978,7 @@
           text: "薬は毒薬だったようだ…。\n\n辺りを見回したが、先に進む道はなさそうだ……戻って別の道を探そう。",
           character: null,
           nextSceneId: "Scene45",
-          hpChange: -50 // BUG-B65 // HP減少イベント
+          hpChange: -5 // HP減少イベント
         },
         {
           id: "Scene46_notUseItem",
@@ -2025,7 +1993,7 @@
           text: "今魔物と戦っても勝てる見込みはなさそうだ。\n背を向けた途端に襲われそうなのでジリジリと間合いを広げながら逃げられる隙を伺った。\n\n今だ！ともと来た道を走り出した瞬間にシュッと何かが腕をかすめた。\n無我夢中で走るうちに、どうやら撒けたようでアイツは居ない。別の道を進んでみよう。",
           character: null,
           nextSceneId: "Scene45",
-          hpChange: +2.5 // BUG-B58 // HP減少イベント
+          hpChange: -2.5 // HP減少イベント
         },
 
         //シーン47 ドラゴン遭遇～戦闘
@@ -2077,7 +2045,7 @@
           text: "薬は回復薬だったようだ。戦いの傷はすっかり癒えてしまった。",
           character: null,
           nextSceneId: "Scene47_SelectScene",
-          hpChange: 0 // BUG-B53 // HP回復イベント
+          hpChange: +100 // HP回復イベント
         },
         {
           id: "Scene47_SelectScene",
@@ -2087,7 +2055,8 @@
           choices: [
             { 
               text: "前へ進む",
-               conditionalBranching: {
+               nextSceneId: "Scene9",
+                conditionalBranching: {
                     itemRequired: "gold_key",
                     trueSceneId: "Scene48_Already_Havegold_key", // 金の鍵を持っている場合
                     falseSceneId: "Scene48" // 金の鍵を持っていない場合
@@ -2334,7 +2303,7 @@
           background: "./images/Scene55_victory.jpg",
           text: "薬は回復薬だったようだ。戦いの傷はすっかり癒えてしまった。",
           character: null,
-          hpChange: -100 // BUG-B54 // HP回復イベント
+          hpChange: +100 // HP回復イベント
         },
         {
           id: "Scene55_SelectScene",
@@ -2342,7 +2311,7 @@
           text: "さて、どちらに進もうか…。",
           character: null,
           choices: [
-            { text: "前へ進む", nextSceneId: "Scene53" }, // BUG-B79: ボス撃破後に前へ進むと階段に戻る
+            { text: "前へ進む", nextSceneId: "Scene56"},
             { text: "来た道を戻る", nextSceneId: "Scene53"}
           ],
         },
@@ -2618,7 +2587,7 @@
         {
           id: "GameOver",
           background: "./images/GameOver.jpg",
-          text: "", // BUG-B88
+          text: "",
           character: null,
           hpChange: -100
         },
@@ -2678,7 +2647,7 @@
         };
         
         if (attackRoll <= accuracy) {
-          if (criticalRoll >= criticalRate) { // BUG-B63
+          if (criticalRoll <= criticalRate) {
             result.type = 'critical';
             result.damage = attackPower * 2;
             result.message = `クリティカルヒット！ ${weaponName}で${result.damage}のダメージ！`;
@@ -2723,7 +2692,7 @@
             setTextProgress(0);
             setCurrentBattle(null);
             setBattleLog([]);
-          }, 200); // BUG-B96
+          }, 2000);
           return;
         }
         
@@ -2747,7 +2716,7 @@
             setTextProgress(0);
             setCurrentBattle(null);
             setBattleLog([]);
-            processSceneEffects(0); // BUG-B78
+            processSceneEffects(defeatIndex);
           }, 2000);
         } else {
           setShowWeaponSelect(false);
@@ -2763,7 +2732,7 @@
       const getNextSceneIndex = (nextSceneId) => {
         if (!nextSceneId) return null;
         const index = getSceneIndexById(nextSceneId);
-        return index !== null ? index : null; // BUG-B91
+        return index !== -1 ? index : null;
       };
 
       const currentScene = scenario[currentSceneIndex];
@@ -2785,7 +2754,7 @@
         if (scene && scene.hpChange) {
           setHP(prevHP => {
             let newHP = prevHP + scene.hpChange;
-            // if (newHP > maxHP) newHP = maxHP; // BUG-B93
+            if (newHP > maxHP) newHP = maxHP;
             if (newHP < 0) newHP = 0;
             return newHP;
           });
@@ -2802,19 +2771,21 @@
           const { id: itemId, consumeOnUse } = scene.useItem;
           if (consumeOnUse) {
             setInventory(prevInventory => 
-              prevInventory.filter(item => item.id.toLowerCase() === itemId.toLowerCase()) // BUG-B60
+              prevInventory.filter(item => item.id.toLowerCase() !== itemId.toLowerCase())
             );
           }
         }
         
-        if (scene) { setCurrentBGM(scene.bgm); } // BUG-B82
+        if (scene && scene.bgm) {
+          setCurrentBGM(scene.bgm);
+        }
       };
 
       useEffect(() => {
         if (currentScene && !showChoices && !currentBattle && textProgress < currentScene.text.length) {
           setIsAnimating(true);
           const timer = setTimeout(() => {
-            setTextProgress(textProgress + 10); // BUG-B81
+            setTextProgress(textProgress + 1);
           }, textSpeed);
           return () => clearTimeout(timer);
         } else {
@@ -2829,7 +2800,7 @@
           }, autoPlaySpeed);
           return () => clearTimeout(timer);
         }
-      }, [autoPlayActive, isAnimating, showChoices, currentScene, isGameOver, currentBattle, currentSceneIndex]); // BUG-B77
+      }, [autoPlayActive, isAnimating, showChoices, currentScene, isGameOver, currentBattle]);
 
       const handleNext = () => {
         if (showChoices || isGameOver || currentBattle) return;
@@ -2893,7 +2864,7 @@
               return;
             }
             
-           if (currentSceneIndex < scenario.length + 1) { // BUG-B92
+           if (currentSceneIndex < scenario.length - 1) {
              const nextIndex = currentSceneIndex + 1;
              setCurrentSceneIndex(nextIndex);
              setTextProgress(0);
@@ -2906,7 +2877,7 @@
       const handleChoice = (choice) => {
 
       // ★ここで「最初から再開」の判定をする
-          if (choice.text === "restart") { // BUG-B86
+          if (choice.text === "ゲームを最初から再開する") {
               resetGame();
                   return;  // これ以降の処理をスキップ
           }
@@ -2921,7 +2892,7 @@
         // ★ランダム分岐処理（追加）
         if (choice.randomBranching) {
           const { sceneIds } = choice.randomBranching;
-          nextSceneId = sceneIds[Math.ceil(Math.random() * sceneIds.length)]; // BUG-B94
+          nextSceneId = sceneIds[Math.floor(Math.random() * sceneIds.length)];
         }
         else if (choice.multiConditionalBranching) {
           nextSceneId = choice.defaultSceneId;
@@ -2953,9 +2924,9 @@
       };
       
       const handleRestart = () => {
-        setCurrentSceneIndex(1); // BUG-B80
+        setCurrentSceneIndex(0);
         setTextProgress(0);
-        setHP(0); // BUG-B66: ゲームオーバー再開時HPが0スタート
+        setHP(maxHP);
         setIsGameOver(false);
         setInventory([]);
         setHistoryLog([]);
@@ -2991,7 +2962,7 @@
         { className: "flex flex-col items-center justify-center w-full h-screen bg-gray-900 text-white" },
         [
           e('div', 
-            { key: 'main-container', className: "relative w-full max-w-4xl h-screen bg-black /*BUG-B99*/ rounded-lg overflow-hidden shadow-lg" },
+            { key: 'main-container', className: "relative w-full max-w-4xl h-3/4 bg-black rounded-lg overflow-hidden shadow-lg" },
             [
               currentScene && e(Scene, { key: 'scene', background: currentScene.background, backgroundSize: getCurrentBackgroundSize() }),
               
@@ -3018,7 +2989,7 @@
               !isGameOver && !showWeaponSelect && e('div', 
                 { 
                   key: 'textbox',
-                  className: "absolute bottom-0 w-full min-h-16 bg-gray-800 bg-opacity-0 /*BUG-B97*/ p-4 rounded-t-lg",
+                  className: "absolute bottom-0 w-full min-h-16 bg-gray-800 bg-opacity-90 p-4 rounded-t-lg",
                   onClick: handleNext
                 },
                 [
@@ -3039,18 +3010,18 @@
                   
                   !showChoices && !currentBattle && e('div', 
                     { key: 'click-indicator', className: "absolute bottom-2 right-4 text-sm text-gray-400" },
-                    isAnimating ? "クリックして次へ" : "クリックして次へ" // BUG-B75
+                    isAnimating ? "テキスト表示中..." : "クリックして次へ"
                   )
                 ]
               ),
               
               showChoices && currentScene?.choices && e('div', 
-                { key: 'choices', className: "absolute bottom-32 left-1/2 transform -translate-x-1/2 w-1/4" /*BUG-B72*/ },
+                { key: 'choices', className: "absolute bottom-32 left-1/2 transform -translate-x-1/2 w-3/4" },
                 currentScene.choices.map((choice, index) => 
                   e('button', 
                     { 
                       key: index, 
-                      className: "w-full mt-3 py-3 px-4 bg-blue-700 /*BUG-B98*/ hover:bg-blue-600 text-white rounded-lg text-lg shadow-lg",
+                      className: "w-full mb-3 py-3 px-4 bg-blue-700 hover:bg-blue-600 text-white rounded-lg text-lg shadow-lg",
                       onClick: () => handleChoice(choice)
                     },
                     choice.text
@@ -3065,7 +3036,7 @@
                     { 
                       key: 'history-btn',
                       className: "px-3 py-1 bg-gray-700 hover:bg-gray-600 rounded-md text-sm",
-                      onClick: toggleHistory,
+                      onClick: toggleHistory
                     },
                     "履歴"
                   ),
@@ -3074,7 +3045,7 @@
                     { 
                       key: 'config-btn',
                       className: "px-3 py-1 bg-gray-700 hover:bg-gray-600 rounded-md text-sm",
-                      onClick: toggleConfig,
+                      onClick: toggleConfig
                     },
                     "設定"
                   ),
@@ -3129,7 +3100,7 @@
                         max: "100",
                         value: textSpeed,
                         className: "w-full",
-                        onChange: (e) => setTextSpeed(100 - Number(e.target.value)) // BUG-B67
+                        onChange: (e) => setTextSpeed(Number(e.target.value))
                       }),
                       e('div', { key: 'text-speed-labels', className: "flex justify-between text-sm" }, [
                         e('span', { key: 'fast' }, "速い"),
@@ -3146,7 +3117,7 @@
                         max: "5000",
                         value: autoPlaySpeed,
                         className: "w-full",
-                        onChange: (e) => setAutoPlaySpeed(6000 - parseInt(e.target.value)) // BUG-B68
+                        onChange: (e) => setAutoPlaySpeed(parseInt(e.target.value))
                       }),
                       e('div', { key: 'autoplay-speed-labels', className: "flex justify-between text-sm" }, [
                         e('span', { key: 'fast2' }, "速い"),
@@ -3170,13 +3141,13 @@
 
                     e('div', { key: 'bgm-volume', className: "space-y-2" }, [
                       e('label', { key: 'bgm-volume-label', className: "block" },
-                        `SE音量: ${Math.round(bgmVolume * 100)}%` // BUG-B100
+                        `BGM音量: ${Math.round(bgmVolume * 100)}%`
                       ),
                       e('input', {
                         key: 'bgm-volume-input',
                         type: "range",
                         min: "0",
-                        max: "0.5", // BUG-B84
+                        max: "1",
                         step: "0.01",
                         value: bgmVolume,
                         className: "w-full",
@@ -3190,7 +3161,7 @@
                     
                     e('button', { 
                       key: 'close-config',
-                      className: "w-full py-2 bg-black hover:bg-gray-900 rounded-md mt-4", // BUG-B76
+                      className: "w-full py-2 bg-blue-600 hover:bg-blue-500 rounded-md mt-4",
                       onClick: toggleConfig
                     }, "閉じる")
                   ])
