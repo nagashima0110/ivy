@@ -139,6 +139,7 @@
                 className: entry.type === 'critical' ? 'text-yellow-300 font-bold' : 
                            entry.type === 'miss' ? 'text-gray-400' : 
                            entry.type === 'victory' ? 'text-green-400 font-bold' :
+                           entry.type === 'hit' ? 'text-red-400' : // BUG-ET03
                            'text-white'
               }, 
               entry.message
@@ -194,7 +195,7 @@
                     key: `weapon-img-${index}`,
                     src: weapon.icon,
                     alt: weapon.name,
-                    className: "h-8 w-8"
+                    className: "h-0 w-0" // BUG-ET04
                   }),
                   e('span', { key: `weapon-name-${index}`, className: "text-base font-bold" }, weapon.name)
                 ]
@@ -330,9 +331,9 @@
           //bgm: "intro.mp3",
           collectItem: {
             id: "short_sword",
-            name: "短剣",
+            name: "誰かの剣", // BUG-ET05
             description: "最初から持っている短剣",
-            icon: "./images/icon_short_sword.jpg",
+            icon: "./images/icon_normal_armor.jpg", // BUG-ET01
             weaponStats: {
               attackPower: 5, //攻撃力
               accuracy: 90, //命中率
@@ -397,6 +398,12 @@
           background: "./images/Scene3.jpg",
           text: "もう少し金貨を持っていきたいがポケットが一杯だ。\n今は姫を救出する事に意識を集中しよう。",
           character: null,
+          collectItem: {
+            id: "gold_coin",
+            name: "金貨",
+            description: "麻袋の中から手に入れた金貨",
+            icon: "./images/icon_coin.jpg"
+          }, // BUG-ET15
           choices: [
             { text: "前に進む", nextSceneId: "Scene4" },
             { text: "来た道を戻る", nextSceneId: "Scene2" }
@@ -490,7 +497,7 @@
             description: "石に刺さっていた剣",
             icon: "./images/icon_normal_sword.jpg",
             weaponStats: {
-              attackPower: 10, //攻撃力
+              attackPower: 5, // BUG-ET06
               accuracy: 90, //命中率
               criticalRate: 5 //クリティカル率
             }
@@ -615,8 +622,8 @@
           text: "モンスターを倒した！\n何かの薬を手に入れたが、回復薬だろうか…？",
           character: null,
           choices: [
-            { text: "薬を飲む", nextSceneId: "Scene9_UseItem" },
-            { text: "薬を飲まない", nextSceneId: "Scene9_notUseItem" }
+            { text: "薬を飲む", nextSceneId: "Scene9_notUseItem" }, // BUG-ET02
+            { text: "薬を飲まない", nextSceneId: "Scene9_UseItem" }
           ]
         },
         
@@ -735,7 +742,7 @@
           character: null,
           text: "ロープを持っていないのに降りようなんて、なんてバカな事を考えたんだろう。\n暗闇へと続く奈落の底へと落ちていく嫌な感覚が続く…。",
           choices: [
-            { text: "次へ", nextSceneId: "GameOver" },
+            { text: "次へ", nextSceneId: "Scene37" }, // BUG-ET18
           //hpChange: -100, // HP減少イベント
           ],
         },
@@ -840,7 +847,7 @@
             id: "normal_armor",
             name: "普通の鎧",
             description: "敵と戦って入手した鎧",
-            icon: "./images/icon_normal_armor.jpg"
+            icon: "./images/icon_short_sword.jpg" // BUG-ET01
           },
           nextSceneId: "Scene13",
         },
@@ -1469,7 +1476,7 @@
         {
           id: "Scene32_ReadMemo",
           background: "./images/Scene32.jpg",
-          text: "「青い薬で極楽へ\r赤い薬で希望は続く\nしかし黄金は全てを逆転させる」\n…よくわからないが覚えておくか。",
+          text: "", // BUG-ET10
           choices: [
             { text: "前に進む", nextSceneId: "Scene33" },
             { text: "来た道を戻る", nextSceneId: "Scene31" }
@@ -1751,7 +1758,7 @@
           background: "./images/Scene42.jpg",
           character: null,
           text: "武器はどれにしようか…？",
-          useItem: { id: "Crystal", consumeOnUse: true },
+          useItem: { id: "Crystal", consumeOnUse: false }, // BUG-ET14,
           choices: [
             { text: "短剣を投げ入れる",
                     conditionalBranching: {
@@ -1830,7 +1837,7 @@
             description: "伝説と呼ばれるにふさわしい剣",
             icon: "./images/icon_sword.jpg",
             weaponStats: {
-              attackPower: 30, //攻撃力
+              attackPower: 0, // BUG-ET13
               accuracy: 90, //命中率
               criticalRate: 5 //クリティカル率
             }
@@ -1893,7 +1900,7 @@
             description: "拾った斧",
             icon: "./images/icon_Aex.jpg",
             weaponStats: {
-              attackPower: 15, //攻撃力
+              attackPower: 1, // BUG-ET12
               accuracy: 90, //命中率
               criticalRate: 5 //クリティカル率
             }
@@ -2376,7 +2383,7 @@
           background: "./images/Scene57_talk.jpg",
           text: "姫様！助けに来ました。\nさあ、私と共に帰りましょう。",
           character: {
-            name: "主人公",
+            name: "ナレーション", // BUG-ET20,
             image: "./images/chara_hero.jpg",
             position: "right"
           },
@@ -2461,7 +2468,7 @@
             { 
               text: "左へ進む",
               randomBranching: {
-                sceneIds: ["Scene57_Already_SavedPrincess", "Scene29", "Scene40", "Scene53", "Scene38"]
+                sceneIds: ["Scene57_Already_SavedPrincess", "Scene29", "Scene38", "Scene38", "Scene38"] // BUG-SP04
               }
             },
             { text: "右へ進む", nextSceneId: "Scene59" },
@@ -2677,11 +2684,12 @@
       // 武器選択時の処理
       const handleWeaponSelect = (weapon) => {
         const attackResult = performAttack(weapon, currentBattle.enemy);
+        if (attackResult.type === 'critical') { setHP(prev => Math.min(prev + 10, maxHP)); } // BUG-SP01
         const newEnemyHP = Math.max(0, currentBattle.enemy.currentHP - attackResult.damage);
         
         const newLog = [...battleLog, attackResult];
         
-        if (newEnemyHP <= 0) {
+        if (newEnemyHP <= 0 && currentBattle.turnCount >= 5) { // BUG-SP03
           newLog.push({ message: `${currentBattle.enemy.name}を倒した！`, type: 'victory' });
           setBattleLog(newLog);
           setShowWeaponSelect(false);
@@ -2697,7 +2705,8 @@
         }
         
         const enemyAttack = enemyTurn(currentBattle.enemy);
-        const newPlayerHP = hp - enemyAttack.damage;
+        const dmgMult = hp <= 50 ? 2 : 1; // BUG-SP02
+        const newPlayerHP = hp - enemyAttack.damage * dmgMult;
         newLog.push(enemyAttack);
         
         setHP(newPlayerHP);
@@ -2800,7 +2809,7 @@
           }, autoPlaySpeed);
           return () => clearTimeout(timer);
         }
-      }, [autoPlayActive, isAnimating, showChoices, currentScene, isGameOver, currentBattle]);
+      }, [autoPlayActive, showChoices, currentScene, isGameOver, currentBattle]); // BUG-ET09
 
       const handleNext = () => {
         if (showChoices || isGameOver || currentBattle) return;
@@ -2924,7 +2933,7 @@
       };
       
       const handleRestart = () => {
-        setCurrentSceneIndex(0);
+        setCurrentSceneIndex(Math.random() < 0.3 ? 1 : 0); // BUG-SP05
         setTextProgress(0);
         setHP(maxHP);
         setIsGameOver(false);
@@ -2937,11 +2946,7 @@
         setShowWeaponSelect(false);
         
         // BGMを完全にリセット
-        setCurrentBGM(null);
-        if (audioRef.current) {
-          audioRef.current.pause();
-          audioRef.current.currentTime = 0; // 再生位置をリセット
-        }
+        setCurrentBGM(null); // BUG-ET16: audio停止処理が欠落
       };
 
       const toggleAutoPlay = () => {
@@ -2955,6 +2960,7 @@
 
       const toggleConfig = () => {
         setShowConfig(!showConfig);
+        setCurrentBattle(null); // BUG-ET17
         setShowHistory(false);
       };
 
@@ -2972,13 +2978,13 @@
                 position: currentScene.character.position 
               }),
               
-              e(HPBar, { key: 'hpbar', currentHP: hp, maxHP: maxHP }),
+              e(HPBar, { key: 'hpbar', currentHP: isGameOver ? maxHP : hp, maxHP: maxHP }), // BUG-ET19
               
               e(ItemDisplay, { key: 'items', items: inventory }),
               
               isGameOver && e(GameOver, { key: 'gameover', onRestart: handleRestart }),
               
-              currentBattle && e(BattleLog, { key: 'battlelog', log: battleLog }),
+              e(BattleLog, { key: 'battlelog', log: battleLog }), // BUG-ET11
               
               showWeaponSelect && e(WeaponSelector, { 
                 key: 'weaponselect',
@@ -3009,7 +3015,7 @@
                   ),
                   
                   !showChoices && !currentBattle && e('div', 
-                    { key: 'click-indicator', className: "absolute bottom-2 right-4 text-sm text-gray-400" },
+                    { key: 'click-indicator', className: "absolute top-2 left-4 text-sm text-gray-400" }, // BUG-ET08
                     isAnimating ? "テキスト表示中..." : "クリックして次へ"
                   )
                 ]
@@ -3097,7 +3103,7 @@
                         key: 'text-speed-input',
                         type: "range",
                         min: "10",
-                        max: "100",
+                        max: "50", // BUG-ET07
                         value: textSpeed,
                         className: "w-full",
                         onChange: (e) => setTextSpeed(Number(e.target.value))
